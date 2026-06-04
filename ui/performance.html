@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Hedge Bot — Performance Analytics</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg:      #0d0f14;
+    --surface: #161a22;
+    --surface2:#1e2330;
+    --border:  #2a2f3d;
+    --accent:  #3b82f6;
+    --green:   #22c55e;
+    --red:     #ef4444;
+    --yellow:  #f59e0b;
+    --purple:  #a78bfa;
+    --text:    #e2e8f0;
+    --muted:   #64748b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 13px; min-height: 100vh;
+  }
+
+  /* ── Header ── */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 28px; background: var(--surface);
+    border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10;
+  }
+  header h1 { font-size: 15px; letter-spacing: 2px; color: var(--accent); }
+  .back-btn {
+    background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+    padding: 6px 16px; border-radius: 6px; cursor: pointer; font-family: inherit;
+    font-size: 12px; text-decoration: none; display: inline-block;
+  }
+  .back-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* ── Period tabs ── */
+  .tabs {
+    display: flex; gap: 8px; padding: 16px 28px 0;
+  }
+  .tab {
+    padding: 8px 24px; border-radius: 8px 8px 0 0; border: 1px solid var(--border);
+    border-bottom: none; cursor: pointer; font-family: inherit; font-size: 12px;
+    font-weight: 700; letter-spacing: 1px; background: var(--surface2);
+    color: var(--muted); transition: all .15s;
+  }
+  .tab.active { background: var(--surface); color: var(--accent); border-color: var(--accent); }
+  .tab:hover:not(.active) { color: var(--text); }
+
+  /* ── Main layout ── */
+  .page { padding: 0 28px 28px; }
+  .section { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); padding: 20px; margin-top: 16px; }
+  .section-title { font-size: 10px; letter-spacing: 2px; color: var(--muted); margin-bottom: 16px; text-transform: uppercase; }
+
+  /* ── Summary cards ── */
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 12px;
+    margin-bottom: 0;
+  }
+  .stat-card {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px 16px;
+  }
+  .stat-card label { display: block; font-size: 9px; letter-spacing: 1.5px; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; }
+  .stat-card .val { font-size: 22px; font-weight: 700; line-height: 1; }
+  .stat-card .sub { font-size: 10px; color: var(--muted); margin-top: 4px; }
+  .pos { color: var(--green); }
+  .neg { color: var(--red); }
+  .neu { color: var(--yellow); }
+  .acc { color: var(--accent); }
+  .pur { color: var(--purple); }
+
+  /* ── Two-column chart row ── */
+  .chart-row { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-top: 16px; }
+  .chart-wrap { position: relative; height: 240px; }
+  canvas { width: 100% !important; }
+
+  /* ── Tables ── */
+  .tbl-wrap { overflow-x: auto; margin-top: 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  th { text-align: left; color: var(--muted); font-size: 9px; letter-spacing: 1px; padding: 6px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  td { padding: 7px 8px; border-bottom: 1px solid #1a1f2e; vertical-align: top; }
+  tr:last-child td { border: none; }
+  tr:hover td { background: #1a1f2e; }
+  .act-BUY  { color: var(--green);  font-weight: 700; }
+  .act-SELL { color: var(--red);    font-weight: 700; }
+  .act-HOLD { color: var(--yellow); font-weight: 700; }
+  .badge {
+    display: inline-block; padding: 2px 8px; border-radius: 20px;
+    font-size: 9px; font-weight: 700; letter-spacing: 1px;
+  }
+  .badge-filled  { background:#14532d; color:var(--green); }
+  .badge-partial { background:#422006; color:var(--yellow); }
+  .badge-rejected{ background:#450a0a; color:var(--red); }
+  .badge-skipped { background:#1e2330; color:var(--muted); }
+
+  /* ── Streak banner ── */
+  .streak {
+    display: inline-flex; align-items: center; gap: 10px;
+    padding: 8px 18px; border-radius: 8px; font-size: 13px; font-weight: 700;
+  }
+  .streak.win  { background: #14532d; color: var(--green); }
+  .streak.loss { background: #450a0a; color: var(--red); }
+  .streak.none { background: var(--surface2); color: var(--muted); }
+
+  /* ── Trade breakdown donut ── */
+  .donut-wrap { position: relative; height: 200px; display: flex; align-items: center; justify-content: center; }
+  .donut-centre { position: absolute; text-align: center; pointer-events: none; }
+  .donut-centre .big { font-size: 26px; font-weight: 900; }
+  .donut-centre .lbl { font-size: 10px; color: var(--muted); }
+
+  /* ── Best / worst trade pair ── */
+  .trade-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 0; }
+  .trade-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+  .trade-card .tc-label { font-size: 9px; letter-spacing: 1.5px; color: var(--muted); margin-bottom: 8px; }
+  .trade-card .tc-pnl { font-size: 20px; font-weight: 900; }
+  .trade-card .tc-meta { font-size: 10px; color: var(--muted); margin-top: 4px; line-height: 1.8; }
+
+  /* ── Loading ── */
+  #loading { text-align: center; padding: 60px; color: var(--muted); font-size: 14px; }
+  .spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; margin-right: 10px; vertical-align: middle; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Empty state ── */
+  .empty { text-align: center; padding: 40px; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📊 PERFORMANCE ANALYTICS</h1>
+  <div style="display:flex;gap:12px;align-items:center">
+    <span id="as-of" style="font-size:10px;color:var(--muted)"></span>
+    <button class="back-btn" onclick="window.close()">← Back to Dashboard</button>
+  </div>
+</header>
+
+<div class="tabs">
+  <button class="tab active" onclick="switchPeriod('daily',   this)">DAILY</button>
+  <button class="tab"        onclick="switchPeriod('weekly',  this)">WEEKLY</button>
+  <button class="tab"        onclick="switchPeriod('monthly', this)">MONTHLY</button>
+</div>
+
+<div class="page">
+  <div id="loading"><span class="spinner"></span>Loading analytics…</div>
+  <div id="content" style="display:none">
+
+    <!-- Summary stat cards -->
+    <div class="section">
+      <div class="section-title">Summary — <span id="period-label">Daily</span></div>
+      <div class="summary-grid" id="summary-cards"></div>
+    </div>
+
+    <!-- Equity curve + trade donut -->
+    <div class="chart-row">
+      <div class="section">
+        <div class="section-title">Cumulative P&amp;L (equity curve)</div>
+        <div class="chart-wrap"><canvas id="equity-chart"></canvas></div>
+      </div>
+      <div class="section">
+        <div class="section-title">Trade Breakdown</div>
+        <div class="donut-wrap">
+          <canvas id="donut-chart"></canvas>
+          <div class="donut-centre" id="donut-centre"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- P&L per bucket bar chart -->
+    <div class="section" style="margin-top:16px">
+      <div class="section-title">P&amp;L per Period</div>
+      <div class="chart-wrap"><canvas id="bar-chart"></canvas></div>
+    </div>
+
+    <!-- Best / worst trade -->
+    <div class="section" style="margin-top:16px">
+      <div class="section-title">Best &amp; Worst Trade</div>
+      <div class="trade-pair" id="best-worst"></div>
+    </div>
+
+    <!-- Per-ticker breakdown -->
+    <div class="section" style="margin-top:16px">
+      <div class="section-title">P&amp;L by Ticker</div>
+      <div class="tbl-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>SYMBOL</th><th>TRADES</th><th>BUYS</th><th>SELLS</th>
+              <th>TOTAL P&amp;L</th><th>WIN RATE</th><th>AVG SLIPPAGE</th>
+              <th>BEST TRADE</th><th>WORST TRADE</th>
+            </tr>
+          </thead>
+          <tbody id="ticker-table"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Trade signal history -->
+    <div class="section" style="margin-top:16px">
+      <div class="section-title">Trade Count by Period</div>
+      <div class="tbl-wrap">
+        <table>
+          <thead>
+            <tr><th>PERIOD</th><th>TOTAL SIGNALS</th><th>BUYS</th><th>SELLS</th><th>HOLDS</th></tr>
+          </thead>
+          <tbody id="counts-table"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</div>
+
+<script>
+const API = 'http://localhost:8000';
+let currentPeriod = 'daily';
+let equityChart = null, donutChart = null, barChart = null;
+
+// ── Formatters ─────────────────────────────────────────────────────────────
+const fmtUSD = n => n == null ? '—' :
+  new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',minimumFractionDigits:2}).format(n);
+const fmtPct = n => n == null ? '—' : n.toFixed(1) + '%';
+const fmtN   = n => n == null ? '—' : n.toLocaleString();
+const pnlCls = n => n > 0 ? 'pos' : n < 0 ? 'neg' : 'neu';
+const pnlPfx = n => n > 0 ? '+' : '';
+
+// ── Chart helpers ──────────────────────────────────────────────────────────
+const CHART_DEFAULTS = {
+  color: '#e2e8f0',
+  borderColor: '#2a2f3d',
+  plugins: { legend: { display: false } },
+  scales: {
+    x: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: '#1e2330' } },
+    y: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: '#1e2330' } },
+  },
+};
+
+function destroyChart(c) { if (c) { c.destroy(); } }
+
+function drawEquity(data) {
+  destroyChart(equityChart);
+  const ctx = document.getElementById('equity-chart').getContext('2d');
+  const labels = data.map(d => d.bucket);
+  const values = data.map(d => d.cumulative_pnl);
+  const isPos  = values[values.length - 1] >= 0;
+
+  equityChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        data: values,
+        borderColor: isPos ? '#22c55e' : '#ef4444',
+        backgroundColor: isPos ? 'rgba(34,197,94,.08)' : 'rgba(239,68,68,.08)',
+        fill: true, tension: 0.3, pointRadius: 3,
+        pointBackgroundColor: isPos ? '#22c55e' : '#ef4444',
+      }]
+    },
+    options: {
+      ...CHART_DEFAULTS,
+      plugins: {
+        ...CHART_DEFAULTS.plugins,
+        tooltip: {
+          callbacks: { label: ctx => fmtUSD(ctx.parsed.y) }
+        }
+      }
+    }
+  });
+}
+
+function drawDonut(summary) {
+  destroyChart(donutChart);
+  const ctx = document.getElementById('donut-chart').getContext('2d');
+  const total = summary.total_buys + summary.total_sells + summary.total_holds;
+
+  donutChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['BUY', 'SELL', 'HOLD'],
+      datasets: [{
+        data: [summary.total_buys, summary.total_sells, summary.total_holds],
+        backgroundColor: ['#22c55e', '#ef4444', '#f59e0b'],
+        borderColor: '#0d0f14', borderWidth: 3,
+      }]
+    },
+    options: {
+      cutout: '68%',
+      plugins: { legend: { display: true, position: 'bottom', labels: { color: '#64748b', font: { size: 10 }, boxWidth: 10 } } },
+      animation: { animateRotate: true },
+    }
+  });
+
+  document.getElementById('donut-centre').innerHTML =
+    `<div class="big">${fmtN(total)}</div><div class="lbl">SIGNALS</div>`;
+}
+
+function drawBar(data) {
+  destroyChart(barChart);
+  const ctx = document.getElementById('bar-chart').getContext('2d');
+  const labels = data.map(d => d.bucket);
+  const values = data.map(d => d.pnl);
+
+  barChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        data: values,
+        backgroundColor: values.map(v => v >= 0 ? 'rgba(34,197,94,.7)' : 'rgba(239,68,68,.7)'),
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      ...CHART_DEFAULTS,
+      plugins: {
+        ...CHART_DEFAULTS.plugins,
+        tooltip: { callbacks: { label: ctx => fmtUSD(ctx.parsed.y) } }
+      }
+    }
+  });
+}
+
+// ── Render functions ───────────────────────────────────────────────────────
+function renderSummary(s) {
+  const streak = s.current_streak;
+  const streakHtml = streak.count > 0
+    ? `<div class="streak ${streak.type}">${streak.type === 'win' ? '🔥' : '🥶'} ${streak.count} ${streak.type.toUpperCase()} STREAK</div>`
+    : `<div class="streak none">No streak</div>`;
+
+  document.getElementById('summary-cards').innerHTML = `
+    <div class="stat-card">
+      <label>Total P&amp;L</label>
+      <div class="val ${pnlCls(s.total_pnl)}">${pnlPfx(s.total_pnl)}${fmtUSD(s.total_pnl)}</div>
+      <div class="sub">${s.filled_executions} filled trades</div>
+    </div>
+    <div class="stat-card">
+      <label>Win Rate</label>
+      <div class="val ${s.win_rate >= 50 ? 'pos' : 'neg'}">${fmtPct(s.win_rate)}</div>
+      <div class="sub">${s.wins}W / ${s.losses}L</div>
+    </div>
+    <div class="stat-card">
+      <label>Total Signals</label>
+      <div class="val acc">${fmtN(s.total_signals)}</div>
+      <div class="sub">incl. HOLDs</div>
+    </div>
+    <div class="stat-card">
+      <label>Buy Signals</label>
+      <div class="val pos">${fmtN(s.total_buys)}</div>
+      <div class="sub">${s.total_signals ? ((s.total_buys/s.total_signals)*100).toFixed(0) : 0}% of signals</div>
+    </div>
+    <div class="stat-card">
+      <label>Sell Signals</label>
+      <div class="val neg">${fmtN(s.total_sells)}</div>
+      <div class="sub">${s.total_signals ? ((s.total_sells/s.total_signals)*100).toFixed(0) : 0}% of signals</div>
+    </div>
+    <div class="stat-card">
+      <label>Hold Signals</label>
+      <div class="val neu">${fmtN(s.total_holds)}</div>
+      <div class="sub">${s.total_signals ? ((s.total_holds/s.total_signals)*100).toFixed(0) : 0}% of signals</div>
+    </div>
+    <div class="stat-card">
+      <label>Avg Confidence</label>
+      <div class="val pur">${s.avg_confidence ? (s.avg_confidence*100).toFixed(1)+'%' : '—'}</div>
+      <div class="sub">across filled trades</div>
+    </div>
+    <div class="stat-card">
+      <label>Avg Slippage</label>
+      <div class="val ${s.avg_slippage_pct > 0.1 ? 'neg' : 'pos'}">${fmtPct(s.avg_slippage_pct)}</div>
+      <div class="sub">execution quality</div>
+    </div>
+    <div class="stat-card" style="grid-column:1/-1">
+      <label>Current Streak</label>
+      ${streakHtml}
+    </div>
+  `;
+
+  document.getElementById('as-of').textContent = 'as of ' + (s.as_of ? s.as_of.split('T')[0] : '—');
+}
+
+function renderBestWorst(s) {
+  function tradeCard(label, t, isGood) {
+    if (!t) return `<div class="trade-card"><div class="tc-label">${label}</div><div class="empty">No data yet</div></div>`;
+    return `<div class="trade-card">
+      <div class="tc-label">${label}</div>
+      <div class="tc-pnl ${isGood ? 'pos' : 'neg'}">${pnlPfx(t.pnl)}${fmtUSD(t.pnl)}</div>
+      <div class="tc-meta">
+        <span><strong>${t.symbol}</strong> — ${t.action}</span>
+        <span>Qty: ${t.filled_qty} @ $${t.avg_fill_price}</span>
+        <span>Latest close: $${t.latest_close}</span>
+        <span>Slippage: ${fmtPct(t.slippage_pct)}</span>
+        <span>Confidence: ${(t.confidence*100).toFixed(0)}%</span>
+        <span style="color:var(--muted)">${t.created_at ? t.created_at.split('T')[0] : ''}</span>
+      </div>
+    </div>`;
+  }
+  document.getElementById('best-worst').innerHTML =
+    tradeCard('🏆 Best Trade', s.best_trade, true) +
+    tradeCard('💀 Worst Trade', s.worst_trade, false);
+}
+
+function renderTickerTable(tickers) {
+  const tbody = document.getElementById('ticker-table');
+  if (!tickers.length) {
+    tbody.innerHTML = '<tr><td colspan="9" class="empty">No execution data for this period</td></tr>';
+    return;
+  }
+  tbody.innerHTML = tickers.map(t => {
+    const pnlCl = pnlCls(t.total_pnl);
+    return `<tr>
+      <td><strong>${t.symbol}</strong></td>
+      <td>${t.total_trades}</td>
+      <td class="act-BUY">${t.buys}</td>
+      <td class="act-SELL">${t.sells}</td>
+      <td class="${pnlCl}">${pnlPfx(t.total_pnl)}${fmtUSD(t.total_pnl)}</td>
+      <td class="${t.win_rate >= 50 ? 'pos' : 'neg'}">${fmtPct(t.win_rate)}</td>
+      <td>${fmtPct(t.avg_slippage)}</td>
+      <td class="pos">${t.best_trade  ? pnlPfx(t.best_trade.pnl)+fmtUSD(t.best_trade.pnl)  : '—'}</td>
+      <td class="neg">${t.worst_trade ? fmtUSD(t.worst_trade.pnl) : '—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderCountsTable(counts) {
+  const tbody = document.getElementById('counts-table');
+  if (!counts.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="empty">No signals for this period</td></tr>';
+    return;
+  }
+  tbody.innerHTML = counts.map(r => `<tr>
+    <td><strong>${r.bucket}</strong></td>
+    <td>${r.total}</td>
+    <td class="act-BUY">${r.buys}</td>
+    <td class="act-SELL">${r.sells}</td>
+    <td class="act-HOLD">${r.holds}</td>
+  </tr>`).join('');
+}
+
+// ── Main load ──────────────────────────────────────────────────────────────
+async function loadAnalytics(period) {
+  document.getElementById('loading').style.display = 'block';
+  document.getElementById('content').style.display = 'none';
+
+  try {
+    const r = await fetch(`${API}/analytics?period=${period}`);
+    if (!r.ok) throw new Error(await r.text());
+    const data = await r.json();
+
+    const { summary, by_period, by_ticker, trade_counts } = data;
+
+    document.getElementById('period-label').textContent =
+      period.charAt(0).toUpperCase() + period.slice(1);
+
+    renderSummary(summary);
+    renderBestWorst(summary);
+    renderTickerTable(by_ticker);
+    renderCountsTable(trade_counts);
+
+    if (by_period.length) {
+      drawEquity(by_period);
+      drawBar(by_period);
+    }
+    drawDonut(summary);
+
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('content').style.display = 'block';
+
+  } catch(e) {
+    document.getElementById('loading').innerHTML =
+      `<div style="color:var(--red)">Failed to load analytics: ${e.message}</div>`;
+  }
+}
+
+function switchPeriod(period, btn) {
+  currentPeriod = period;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  loadAnalytics(period);
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────
+loadAnalytics('daily');
+</script>
+</body>
+</html>

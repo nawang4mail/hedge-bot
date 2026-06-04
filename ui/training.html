@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Hedge Bot — Training</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg:#0d0f14; --surface:#161a22; --surface2:#1e2330;
+    --border:#2a2f3d; --accent:#3b82f6; --green:#22c55e;
+    --red:#ef4444; --yellow:#f59e0b; --purple:#a78bfa;
+    --text:#e2e8f0; --muted:#64748b;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono','Fira Code',monospace;font-size:13px;min-height:100vh;}
+  header{display:flex;align-items:center;justify-content:space-between;padding:14px 28px;background:var(--surface);border-bottom:1px solid var(--border);}
+  header h1{font-size:15px;letter-spacing:2px;color:var(--accent);}
+  .back-btn{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 16px;border-radius:6px;cursor:pointer;font-family:inherit;font-size:12px;text-decoration:none;}
+  .back-btn:hover{border-color:var(--accent);color:var(--accent);}
+
+  .layout{display:grid;grid-template-columns:320px 1fr;gap:0;min-height:calc(100vh - 55px);}
+
+  /* ── Sidebar ── */
+  .sidebar{border-right:1px solid var(--border);padding:20px;overflow-y:auto;}
+  .sidebar-section{margin-bottom:24px;}
+  .sidebar-title{font-size:9px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-bottom:12px;}
+
+  .sym-input-row{display:flex;gap:8px;margin-bottom:10px;}
+  .sym-input-row input{flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-family:inherit;font-size:12px;}
+  .sym-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;}
+  .sym-chip{background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:3px 10px;font-size:11px;display:flex;align-items:center;gap:6px;}
+  .sym-chip .rm{cursor:pointer;color:var(--muted);}
+  .sym-chip .rm:hover{color:var(--red);}
+
+  .check-group{display:flex;flex-direction:column;gap:8px;}
+  .check-item{display:flex;align-items:center;gap:8px;cursor:pointer;}
+  .check-item input[type=checkbox]{accent-color:var(--accent);width:14px;height:14px;}
+  .check-item label{cursor:pointer;font-size:12px;}
+  .check-item .badge{font-size:9px;color:var(--muted);margin-left:auto;}
+
+  .range-row{display:flex;align-items:center;gap:10px;margin-top:8px;}
+  .range-row label{font-size:10px;color:var(--muted);white-space:nowrap;}
+  .range-row input{flex:1;accent-color:var(--accent);}
+  .range-row span{font-size:11px;min-width:32px;text-align:right;}
+
+  .btn{padding:9px 0;border-radius:7px;border:none;cursor:pointer;font-family:inherit;font-size:12px;font-weight:700;letter-spacing:.5px;width:100%;margin-top:6px;transition:opacity .15s;}
+  .btn:hover{opacity:.85;}
+  .btn:disabled{opacity:.4;cursor:not-allowed;}
+  .btn-blue{background:var(--accent);color:#fff;}
+  .btn-green{background:#14532d;color:var(--green);border:1px solid var(--green);}
+  .btn-purple{background:#2e1065;color:var(--purple);border:1px solid var(--purple);}
+
+  /* ── Main content ── */
+  .main{padding:20px;overflow-y:auto;}
+  .tab-bar{display:flex;gap:8px;margin-bottom:16px;border-bottom:1px solid var(--border);padding-bottom:0;}
+  .tab{padding:8px 18px;border:1px solid transparent;border-bottom:none;border-radius:6px 6px 0 0;cursor:pointer;font-family:inherit;font-size:12px;font-weight:700;color:var(--muted);}
+  .tab.active{border-color:var(--border);border-bottom-color:var(--bg);color:var(--accent);background:var(--surface);}
+
+  .panel{display:none;}
+  .panel.active{display:block;}
+
+  .section{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px;margin-bottom:16px;}
+  .section-title{font-size:9px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-bottom:14px;}
+
+  /* ── Phase tracker ── */
+  .phase-strip{display:flex;gap:0;margin-bottom:16px;border-radius:8px;overflow:hidden;border:1px solid var(--border);}
+  .phase-item{flex:1;padding:10px 12px;background:var(--surface2);border-right:1px solid var(--border);transition:background .2s;}
+  .phase-item:last-child{border-right:none;}
+  .phase-item.active{background:#1e2d47;}
+  .phase-item.done{background:#14532d;}
+  .phase-item.error{background:#450a0a;}
+  .phase-label{font-size:9px;letter-spacing:1px;color:var(--muted);text-transform:uppercase;}
+  .phase-status{font-size:11px;font-weight:700;margin-top:3px;}
+  .phase-item.active .phase-status{color:var(--accent);}
+  .phase-item.done   .phase-status{color:var(--green);}
+  .phase-item.error  .phase-status{color:var(--red);}
+  .phase-item        .phase-status{color:var(--muted);}
+
+  /* ── Per-ticker progress rows ── */
+  .ticker-progress-list{display:flex;flex-direction:column;gap:8px;margin-bottom:14px;max-height:240px;overflow-y:auto;}
+  .ticker-row{background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:10px 14px;}
+  .ticker-row.done  {border-color:#14532d;}
+  .ticker-row.error {border-color:var(--red);}
+  .tr-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+  .tr-sym{font-size:13px;font-weight:900;}
+  .tr-source{font-size:9px;color:var(--muted);}
+  .tr-right{display:flex;gap:14px;align-items:center;}
+  .tr-pct{font-size:12px;font-weight:700;}
+  .tr-eta{font-size:10px;color:var(--muted);}
+  .tr-count{font-size:10px;color:var(--green);}
+  .progress-bar-wrap{height:6px;background:#1e2330;border-radius:3px;overflow:hidden;}
+  .progress-bar{height:100%;border-radius:3px;transition:width .4s ease;background:var(--accent);}
+  .progress-bar.done{background:var(--green);}
+  .progress-bar.error{background:var(--red);}
+  .tr-detail{font-size:10px;color:var(--muted);margin-top:4px;}
+
+  /* ── Feature importance bars ── */
+  .feat-list{display:flex;flex-direction:column;gap:5px;}
+  .feat-row{display:flex;align-items:center;gap:8px;}
+  .feat-name{font-size:10px;color:var(--muted);width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0;}
+  .feat-bar-wrap{flex:1;height:12px;background:#1e2330;border-radius:3px;overflow:hidden;}
+  .feat-bar{height:100%;border-radius:3px;background:var(--purple);}
+  .feat-score{font-size:10px;color:var(--purple);min-width:36px;text-align:right;}
+
+  /* ── Metrics chart ── */
+  .metrics-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px;}
+  .mini-chart-wrap{height:140px;position:relative;}
+
+  /* ── Error cards ── */
+  .error-list{display:flex;flex-direction:column;gap:8px;margin-top:8px;}
+  .error-card{background:#1a0505;border:1px solid var(--red);border-radius:7px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;}
+  .error-card .ec-sym{font-weight:900;color:var(--red);}
+  .error-card .ec-msg{font-size:10px;color:#fca5a5;margin-top:2px;}
+  .error-card .ec-src{font-size:9px;color:var(--muted);}
+  .retry-btn{background:transparent;border:1px solid var(--red);color:var(--red);padding:4px 12px;border-radius:5px;cursor:pointer;font-family:inherit;font-size:10px;font-weight:700;white-space:nowrap;}
+  .retry-btn:hover{background:var(--red);color:#fff;}
+
+  /* ── Log terminal ── */
+  #job-log{background:#080a0f;border:1px solid var(--border);border-radius:8px;padding:10px 12px;height:160px;overflow-y:auto;font-size:10px;line-height:1.7;}
+  .log-line{color:var(--muted);}
+  .log-line.ok  {color:var(--green);}
+  .log-line.err {color:var(--red);}
+  .log-line.info{color:var(--accent);}
+  .log-line.warn{color:var(--yellow);}
+
+  /* ── Job header bar ── */
+  .job-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+  .job-status-badge{padding:4px 12px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:1px;}
+  .job-idle    {background:var(--surface2);color:var(--muted);}
+  .job-running {background:#1e3a5f;color:var(--accent);}
+  .job-done    {background:#14532d;color:var(--green);}
+  .job-error   {background:#450a0a;color:var(--red);}
+  .job-elapsed {font-size:10px;color:var(--muted);}
+  .job-row-total{font-size:11px;color:var(--green);}
+
+  /* ── Insert counter banner ── */
+  .insert-banner{display:flex;gap:20px;flex-wrap:wrap;padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;margin-bottom:12px;}
+  .insert-item label{font-size:9px;color:var(--muted);display:block;letter-spacing:1px;}
+  .insert-item span{font-size:14px;font-weight:700;color:var(--green);}
+
+  /* Model cards */
+  .model-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;}
+  .model-card{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;}
+  .model-card .mc-sym{font-size:16px;font-weight:900;}
+  .model-card .mc-tf{font-size:10px;color:var(--muted);margin-bottom:8px;}
+  .model-card .mc-stat{font-size:11px;margin:3px 0;}
+  .model-card .mc-stat span{color:var(--muted);}
+  .model-card .mc-badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:9px;font-weight:700;margin-top:8px;}
+  .badge-active{background:#14532d;color:var(--green);}
+  .badge-stale{background:#422006;color:var(--yellow);}
+  .mc-actions{display:flex;gap:6px;margin-top:10px;}
+  .mc-btn{flex:1;padding:5px;border-radius:5px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-family:inherit;font-size:10px;font-weight:700;}
+  .mc-btn:hover{border-color:var(--accent);color:var(--accent);}
+
+  /* Backtest result */
+  .bt-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:16px;}
+  .bt-stat{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;}
+  .bt-stat label{display:block;font-size:9px;color:var(--muted);margin-bottom:4px;}
+  .bt-stat .v{font-size:18px;font-weight:700;}
+  .pos{color:var(--green);} .neg{color:var(--red);} .neu{color:var(--yellow);} .acc{color:var(--accent);}
+  .chart-wrap{height:220px;position:relative;}
+
+  /* Backtest list */
+  .bt-list-item{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;}
+  .bt-list-item:hover{border-color:var(--accent);}
+  .bt-left{display:flex;gap:16px;align-items:center;}
+  .bt-sym{font-size:15px;font-weight:900;}
+  .bt-meta{font-size:10px;color:var(--muted);}
+
+  /* Empty */
+  .empty{text-align:center;padding:40px;color:var(--muted);}
+  .spinner{display:inline-block;width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;margin-right:6px;vertical-align:middle;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+</style>
+</head>
+<body>
+<header>
+  <h1>🧠 TRAINING CENTRE</h1>
+  <a class="back-btn" href="dashboard.html">← Dashboard</a>
+</header>
+
+<div class="layout">
+
+  <!-- ── Sidebar ── -->
+  <div class="sidebar">
+
+    <div class="sidebar-section">
+      <div class="sidebar-title">Target Symbols</div>
+      <div class="sym-input-row">
+        <input id="sym-inp" type="text" placeholder="e.g. AAPL" onkeydown="if(event.key==='Enter')addSym()"/>
+        <button class="btn btn-blue" style="width:auto;padding:6px 12px;margin:0" onclick="addSym()">+</button>
+      </div>
+      <div class="sym-chips" id="sym-chips"></div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-title">Data Sources to Backfill</div>
+      <div class="check-group">
+        <label class="check-item">
+          <input type="checkbox" id="src-ohlcv" checked/>
+          <label for="src-ohlcv">Price (OHLCV)</label>
+          <span class="badge">yfinance · free</span>
+        </label>
+        <label class="check-item">
+          <input type="checkbox" id="src-hourly"/>
+          <label for="src-hourly">+ Hourly candles</label>
+          <span class="badge">730 days max</span>
+        </label>
+        <label class="check-item">
+          <input type="checkbox" id="src-news" checked/>
+          <label for="src-news">News Sentiment</label>
+          <span class="badge">GDELT · free</span>
+        </label>
+        <label class="check-item">
+          <input type="checkbox" id="src-reddit" checked/>
+          <label for="src-reddit">Reddit Mentions</label>
+          <span class="badge">PRAW · free</span>
+        </label>
+        <label class="check-item">
+          <input type="checkbox" id="src-earnings" checked/>
+          <label for="src-earnings">Earnings + SEC</label>
+          <span class="badge">EDGAR · free</span>
+        </label>
+      </div>
+      <div class="range-row" style="margin-top:12px;">
+        <label>Years of history</label>
+        <input type="range" id="years-range" min="1" max="10" value="5" oninput="$('years-val').textContent=this.value"/>
+        <span id="years-val">5</span>
+      </div>
+      <button class="btn btn-blue" onclick="startBackfill()">⬇ START BACKFILL</button>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-title">Train Model</div>
+      <div class="check-group" style="flex-direction:row;gap:12px;margin-bottom:10px;">
+        <label class="check-item"><input type="radio" name="tf" value="daily" checked/><label>Daily</label></label>
+        <label class="check-item"><input type="radio" name="tf" value="hourly"/><label>Hourly</label></label>
+        <label class="check-item"><input type="radio" name="tf" value="both"/><label>Both</label></label>
+      </div>
+      <button class="btn btn-green" onclick="startTraining()">🏋 TRAIN MODEL</button>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-title">Backtest</div>
+      <select id="bt-sym-sel" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px;border-radius:6px;font-family:inherit;margin-bottom:8px;">
+        <option value="">Select symbol…</option>
+      </select>
+      <select id="bt-tf-sel" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px;border-radius:6px;font-family:inherit;margin-bottom:8px;">
+        <option value="daily">Daily</option>
+        <option value="hourly">Hourly</option>
+      </select>
+      <button class="btn btn-purple" onclick="startBacktest()">📈 RUN BACKTEST</button>
+    </div>
+
+  </div><!-- /sidebar -->
+
+  <!-- ── Main ── -->
+  <div class="main">
+
+    <div class="tab-bar">
+      <div class="tab active" onclick="switchTab('log',this)">JOB LOG</div>
+      <div class="tab" onclick="switchTab('models',this)">MODELS</div>
+      <div class="tab" onclick="switchTab('backtest',this)">BACKTEST RESULTS</div>
+    </div>
+
+    <!-- Job log panel -->
+    <div class="panel active" id="panel-log">
+
+      <!-- Job status header -->
+      <div class="section">
+        <div class="job-header">
+          <div style="display:flex;align-items:center;gap:12px">
+            <span class="job-status-badge job-idle" id="job-badge">IDLE</span>
+            <span class="job-elapsed" id="job-elapsed"></span>
+          </div>
+          <span class="job-row-total" id="job-row-total"></span>
+        </div>
+
+        <!-- Phase tracker -->
+        <div class="phase-strip" id="phase-strip">
+          <div class="phase-item" id="phase-idle">
+            <div class="phase-label">Status</div>
+            <div class="phase-status">Waiting for job…</div>
+          </div>
+        </div>
+
+        <!-- Per-ticker progress rows -->
+        <div class="ticker-progress-list" id="ticker-progress-list"></div>
+
+        <!-- DB insert counters -->
+        <div class="insert-banner" id="insert-banner" style="display:none">
+          <div class="insert-item"><label>OHLCV DAILY</label><span id="ins-ohlcv">0</span></div>
+          <div class="insert-item"><label>OHLCV HOURLY</label><span id="ins-ohlcv-h">0</span></div>
+          <div class="insert-item"><label>NEWS ROWS</label><span id="ins-news">0</span></div>
+          <div class="insert-item"><label>REDDIT ROWS</label><span id="ins-reddit">0</span></div>
+          <div class="insert-item"><label>EARNINGS</label><span id="ins-earn">0</span></div>
+        </div>
+      </div>
+
+      <!-- Training metrics (shown during train jobs) -->
+      <div class="section" id="metrics-section" style="display:none">
+        <div class="section-title">Training Metrics</div>
+        <div class="metrics-row">
+          <div>
+            <div style="font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:6px">LOSS CURVE</div>
+            <div class="mini-chart-wrap"><canvas id="loss-chart"></canvas></div>
+          </div>
+          <div>
+            <div style="font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:6px">TOP 10 FEATURES</div>
+            <div class="feat-list" id="feat-list"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Error cards -->
+      <div class="section" id="error-section" style="display:none">
+        <div class="section-title">⚠ Errors (click Retry to re-run that ticker)</div>
+        <div class="error-list" id="error-list"></div>
+      </div>
+
+      <!-- Log terminal -->
+      <div class="section">
+        <div class="section-title">Raw Log</div>
+        <div id="job-log"><span class="log-line">No job running — start a backfill or training job from the sidebar.</span></div>
+      </div>
+
+    </div>
+
+    <!-- Models panel -->
+    <div class="panel" id="panel-models">
+      <div class="section">
+        <div class="section-title">Trained Models</div>
+        <div id="model-grid" class="model-grid"><div class="empty">No models trained yet.</div></div>
+      </div>
+    </div>
+
+    <!-- Backtest panel -->
+    <div class="panel" id="panel-backtest">
+      <div class="section">
+        <div class="section-title">Backtest History</div>
+        <div id="bt-list"></div>
+      </div>
+
+      <div id="bt-detail" style="display:none">
+        <div class="section">
+          <div class="section-title">Results — <span id="bt-detail-title"></span></div>
+          <div class="bt-grid" id="bt-stats"></div>
+          <div style="display:grid;grid-template-columns:2fr 1fr;gap:12px;margin-top:12px;">
+            <div>
+              <div style="font-size:9px;color:var(--muted);letter-spacing:2px;margin-bottom:8px;">EQUITY CURVE</div>
+              <div class="chart-wrap"><canvas id="bt-equity-chart"></canvas></div>
+            </div>
+            <div>
+              <div style="font-size:9px;color:var(--muted);letter-spacing:2px;margin-bottom:8px;">TRADE DISTRIBUTION</div>
+              <div class="chart-wrap"><canvas id="bt-dist-chart"></canvas></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /main -->
+</div>
+
+<script>
+const API = 'http://localhost:8000';
+let symbols    = [];
+let ws         = null;
+let equityChart = null, distChart = null, lossChart = null;
+const $ = id => document.getElementById(id);
+
+// ── Job state ──────────────────────────────────────────────────────────────
+const job = {
+  id: null, status: 'idle', startedAt: null,
+  phases: {},          // phase name → {status, startedAt}
+  tickers: {},         // symbol → {pct, detail, status, rows}
+  errors: [],
+  inserts: { ohlcv: 0, ohlcv_hourly: 0, news_sentiment: 0, reddit_activity: 0, earnings_events: 0 },
+  lossData: [],        // [{epoch, loss, acc}]
+  elapsedInterval: null,
+};
+
+// ── Elapsed timer ──────────────────────────────────────────────────────────
+function startElapsedTimer() {
+  if (job.elapsedInterval) clearInterval(job.elapsedInterval);
+  job.startedAt = Date.now();
+  job.elapsedInterval = setInterval(() => {
+    const s = Math.floor((Date.now() - job.startedAt) / 1000);
+    const m = Math.floor(s / 60), sec = s % 60;
+    $('job-elapsed').textContent = `${m}:${String(sec).padStart(2,'0')} elapsed`;
+  }, 1000);
+}
+function stopElapsedTimer() {
+  if (job.elapsedInterval) { clearInterval(job.elapsedInterval); job.elapsedInterval = null; }
+}
+
+// ── Job status badge ───────────────────────────────────────────────────────
+function setJobStatus(status) {
+  job.status = status;
+  const badge = $('job-badge');
+  badge.className = `job-status-badge job-${status}`;
+  badge.textContent = status.toUpperCase();
+  if (status === 'running') startElapsedTimer();
+  if (status !== 'running') stopElapsedTimer();
+}
+
+// ── Phase tracker ──────────────────────────────────────────────────────────
+function renderPhaseStrip() {
+  const strip = $('phase-strip');
+  const phases = Object.entries(job.phases);
+  if (!phases.length) return;
+  strip.innerHTML = phases.map(([name, p]) => `
+    <div class="phase-item ${p.status}">
+      <div class="phase-label">${name}</div>
+      <div class="phase-status">${
+        p.status === 'active' ? '⏳ Running…' :
+        p.status === 'done'   ? '✓ Done' :
+        p.status === 'error'  ? '✖ Error' : 'Pending'
+      }</div>
+    </div>`).join('');
+}
+
+// ── Ticker progress rows ───────────────────────────────────────────────────
+function renderTickerRows() {
+  const el    = $('ticker-progress-list');
+  const ticks = Object.entries(job.tickers);
+  if (!ticks.length) { el.innerHTML = ''; return; }
+  el.innerHTML = ticks.map(([sym, t]) => {
+    const pct      = t.pct || 0;
+    const barCls   = t.status === 'done' ? 'done' : t.status === 'error' ? 'error' : '';
+    const etaText  = t.eta_s != null ? `ETA ${fmtETA(t.eta_s)}` : '';
+    const rowCls   = t.status === 'done' ? 'done' : t.status === 'error' ? 'error' : '';
+    return `
+      <div class="ticker-row ${rowCls}">
+        <div class="tr-header">
+          <div>
+            <span class="tr-sym">${sym}</span>
+            <span class="tr-source" style="margin-left:8px">${t.source || ''}</span>
+          </div>
+          <div class="tr-right">
+            <span class="tr-count">${t.rows ? '+' + t.rows.toLocaleString() + ' rows' : ''}</span>
+            <span class="tr-eta">${etaText}</span>
+            <span class="tr-pct ${pct >= 100 ? 'pos' : 'acc'}">${pct}%</span>
+          </div>
+        </div>
+        <div class="progress-bar-wrap">
+          <div class="progress-bar ${barCls}" style="width:${Math.min(pct,100)}%"></div>
+        </div>
+        <div class="tr-detail">${t.detail || ''}</div>
+      </div>`;
+  }).join('');
+}
+
+function fmtETA(s) {
+  if (s == null || s <= 0) return '< 1s';
+  if (s < 60)  return `${Math.round(s)}s`;
+  if (s < 3600) return `${Math.floor(s/60)}m ${Math.round(s%60)}s`;
+  return `${Math.floor(s/3600)}h ${Math.floor((s%3600)/60)}m`;
+}
+
+// ── Insert counters ────────────────────────────────────────────────────────
+function updateInsertBanner(table, count) {
+  $('insert-banner').style.display = 'flex';
+  const map = {
+    ohlcv: 'ins-ohlcv', ohlcv_hourly: 'ins-ohlcv-h',
+    news_sentiment: 'ins-news', reddit_activity: 'ins-reddit',
+    earnings_events: 'ins-earn',
+  };
+  const key = map[table];
+  if (key) {
+    job.inserts[table] = (job.inserts[table] || 0) + count;
+    $(key).textContent = job.inserts[table].toLocaleString();
+  }
+}
+
+// ── Error cards ────────────────────────────────────────────────────────────
+function renderErrors() {
+  if (!job.errors.length) { $('error-section').style.display = 'none'; return; }
+  $('error-section').style.display = 'block';
+  $('error-list').innerHTML = job.errors.map((e, i) => `
+    <div class="error-card">
+      <div>
+        <div><span class="ec-sym">${e.symbol}</span>
+             <span class="ec-src" style="margin-left:8px">${e.source || ''}</span></div>
+        <div class="ec-msg">${e.message}</div>
+      </div>
+      ${e.retryable !== false ? `<button class="retry-btn" onclick="retryTicker('${e.symbol}','${e.source}',${i})">↺ Retry</button>` : ''}
+    </div>`).join('');
+}
+
+async function retryTicker(symbol, source, idx) {
+  job.errors.splice(idx, 1);
+  renderErrors();
+  const src = source.split('/')[0];   // e.g. "reddit/wallstreetbets" → "reddit"
+  await startBackfillFor([symbol], [src]);
+}
+
+// ── Loss chart ─────────────────────────────────────────────────────────────
+function updateLossChart() {
+  $('metrics-section').style.display = 'block';
+  const ctx = $('loss-chart').getContext('2d');
+  const labels = job.lossData.map(d => d.epoch);
+  const losses = job.lossData.map(d => d.loss);
+  const accs   = job.lossData.map(d => d.acc);
+
+  if (lossChart) lossChart.destroy();
+  lossChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Val Loss', data: losses, borderColor: '#ef4444', tension: 0.3, pointRadius: 2, yAxisID: 'y' },
+        { label: 'Accuracy', data: accs,   borderColor: '#22c55e', tension: 0.3, pointRadius: 2, yAxisID: 'y1' },
+      ]
+    },
+    options: {
+      plugins: { legend: { display: true, labels: { color: '#64748b', font:{size:9}, boxWidth:8 } } },
+      scales: {
+        x:  { ticks: { color:'#64748b', font:{size:9} }, grid:{color:'#1e2330'} },
+        y:  { ticks: { color:'#ef4444', font:{size:9} }, grid:{color:'#1e2330'}, position:'left' },
+        y1: { ticks: { color:'#22c55e', font:{size:9}, callback: v => (v*100).toFixed(0)+'%' },
+               grid:{drawOnChartArea:false}, position:'right' },
+      }
+    }
+  });
+}
+
+// ── Feature importance bars ────────────────────────────────────────────────
+function renderFeatureImp(features) {
+  $('metrics-section').style.display = 'block';
+  const max = features[0]?.score || 1;
+  $('feat-list').innerHTML = features.map(f => `
+    <div class="feat-row">
+      <div class="feat-name" title="${f.name}">${f.name}</div>
+      <div class="feat-bar-wrap">
+        <div class="feat-bar" style="width:${(f.score/max*100).toFixed(1)}%"></div>
+      </div>
+      <div class="feat-score">${(f.score*100).toFixed(1)}%</div>
+    </div>`).join('');
+}
+
+// ── Row total in header ────────────────────────────────────────────────────
+function updateRowTotal() {
+  const total = Object.values(job.inserts).reduce((a,b) => a+b, 0);
+  $('job-row-total').textContent = total > 0
+    ? `${total.toLocaleString()} total rows inserted` : '';
+}
+
+// ── Symbol management ──────────────────────────────────────────────────────
+function addSym() {
+  const val = $('sym-inp').value.trim().toUpperCase();
+  if (!val || symbols.includes(val)) { $('sym-inp').value=''; return; }
+  symbols.push(val);
+  $('sym-inp').value = '';
+  renderChips(); refreshBacktestSelector();
+}
+function removeSym(s) { symbols = symbols.filter(x => x !== s); renderChips(); }
+function renderChips() {
+  $('sym-chips').innerHTML = symbols.map(s =>
+    `<div class="sym-chip">${s}<span class="rm" onclick="removeSym('${s}')">×</span></div>`
+  ).join('');
+}
+
+// ── Tab switching ──────────────────────────────────────────────────────────
+function switchTab(id, btn) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  $(`panel-${id}`).classList.add('active');
+  if (id === 'models')   refreshModels();
+  if (id === 'backtest') refreshBacktests();
+}
+
+// ── Reset job state ────────────────────────────────────────────────────────
+function resetJobUI() {
+  job.phases  = {};
+  job.tickers = {};
+  job.errors  = [];
+  job.inserts = { ohlcv:0, ohlcv_hourly:0, news_sentiment:0, reddit_activity:0, earnings_events:0 };
+  job.lossData = [];
+  $('job-log').innerHTML = '';
+  $('ticker-progress-list').innerHTML = '';
+  $('insert-banner').style.display = 'none';
+  $('error-section').style.display = 'none';
+  $('metrics-section').style.display = 'none';
+  $('job-row-total').textContent = '';
+  $('job-elapsed').textContent = '';
+  $('phase-strip').innerHTML = `
+    <div class="phase-item" id="phase-idle">
+      <div class="phase-label">Status</div>
+      <div class="phase-status">Waiting for job…</div>
+    </div>`;
+}
+
+// ── WebSocket event dispatcher ─────────────────────────────────────────────
+function connectTrainingWs() {
+  if (ws && ws.readyState === WebSocket.OPEN) return;
+  ws = new WebSocket(`ws://localhost:8000/ws/training`);
+  ws.onmessage = ({ data }) => {
+    let e; try { e = JSON.parse(data); } catch(_) { return; }
+    handleEvent(e);
+  };
+  ws.onclose = () => setTimeout(connectTrainingWs, 2000);
+}
+
+function handleEvent(e) {
+  const ts = new Date().toTimeString().split(' ')[0];
+
+  switch(e.type) {
+
+    case 'phase_start':
+      job.phases[e.phase] = { status: 'active', sources: e.sources };
+      renderPhaseStrip();
+      appendLog(`▶ Phase: ${e.phase} (${e.total_tickers} symbols)`, 'info');
+      break;
+
+    case 'phase_done':
+      if (job.phases[e.phase]) job.phases[e.phase].status = 'done';
+      renderPhaseStrip();
+      appendLog(`✅ ${e.phase} — ${fmtETA(e.elapsed_s)}`, 'ok');
+      break;
+
+    case 'ticker_start':
+      job.tickers[e.symbol] = {
+        pct: 0, detail: `Starting ${e.source}…`,
+        status: 'running', rows: 0, source: e.source,
+        total: e.total, unit: e.unit, eta_s: null,
+      };
+      renderTickerRows();
+      appendLog(`  ${e.symbol} — ${e.source}: fetching ${e.total.toLocaleString()} ${e.unit}…`, 'info');
+      break;
+
+    case 'ticker_progress': {
+      const t = job.tickers[e.symbol] || {};
+      job.tickers[e.symbol] = {
+        ...t,
+        pct:    e.pct || 0,
+        detail: e.detail || `${e.current.toLocaleString()} / ${e.total.toLocaleString()} ${e.unit}`,
+        eta_s:  e.eta_s,
+        status: 'running',
+      };
+      renderTickerRows();
+      // Only log major milestones to avoid flooding
+      if (e.pct && (e.pct % 25 === 0 || e.pct >= 99)) {
+        appendLog(`  ${e.symbol}: ${e.pct}% — ${e.detail || ''}`, 'info');
+      }
+      break;
+    }
+
+    case 'ticker_done': {
+      const t = job.tickers[e.symbol] || {};
+      job.tickers[e.symbol] = {
+        ...t, pct: 100, status: 'done',
+        rows: e.rows_inserted,
+        detail: `✓ ${e.rows_inserted?.toLocaleString()} new rows in ${fmtETA(e.elapsed_s)}`,
+      };
+      renderTickerRows();
+      appendLog(`  ✓ ${e.symbol} (${e.source}): ${e.rows_inserted?.toLocaleString()} rows — ${fmtETA(e.elapsed_s)}`, 'ok');
+      break;
+    }
+
+    case 'ticker_error': {
+      const t = job.tickers[e.symbol] || {};
+      job.tickers[e.symbol] = { ...t, status: 'error', detail: e.message };
+      job.errors.push({ symbol: e.symbol, source: e.source, message: e.message, retryable: e.retryable });
+      renderTickerRows();
+      renderErrors();
+      appendLog(`  ✖ ${e.symbol} (${e.source}): ${e.message}`, 'err');
+      break;
+    }
+
+    case 'row_insert':
+      updateInsertBanner(e.table, e.count);
+      updateRowTotal();
+      if (e.detail) appendLog(`  ${e.detail}`, 'info');
+      break;
+
+    case 'metric':
+      job.lossData.push({ epoch: e.epoch, loss: e.val_loss, acc: e.accuracy });
+      updateLossChart();
+      // Log every 10th checkpoint
+      if (e.epoch % 30 === 0 || e.epoch === e.total_epochs) {
+        appendLog(
+          `  ${e.symbol}/${e.timeframe} [${e.epoch}/${e.total_epochs}] `+
+          `val_loss=${e.val_loss?.toFixed(4)} acc=${e.accuracy ? (e.accuracy*100).toFixed(1)+'%' : '—'}`,
+          'info'
+        );
+      }
+      break;
+
+    case 'feature_imp':
+      renderFeatureImp(e.top_features || []);
+      appendLog(`  ${e.symbol} top feature: ${e.top_features?.[0]?.name} (${(e.top_features?.[0]?.score*100)?.toFixed(1)}%)`, 'info');
+      break;
+
+    case 'log':
+      appendLog(e.message, e.level === 'error' ? 'err' : e.level === 'warn' ? 'warn' : 'info');
+      break;
+
+    case 'done':
+      setJobStatus('done');
+      appendLog(`✅ Job complete in ${fmtETA(e.total_elapsed)} — ${e.error_count} errors`, 'ok');
+      if (e.error_count > 0) renderErrors();
+      refreshModels(); refreshBacktests();
+      break;
+
+    case 'error':
+      setJobStatus('error');
+      appendLog(`✖ Fatal: ${e.message}`, 'err');
+      break;
+  }
+}
+
+function appendLog(msg, cls = '') {
+  const el = $('job-log');
+  const ts = new Date().toTimeString().split(' ')[0];
+  el.innerHTML += `<div class="log-line ${cls}">[${ts}] ${msg}</div>`;
+  el.scrollTop = el.scrollHeight;
+}
+
+// ── Backfill ───────────────────────────────────────────────────────────────
+async function startBackfill() {
+  if (!symbols.length) { alert('Add at least one symbol'); return; }
+  const sources = [];
+  if ($('src-ohlcv').checked)    sources.push('ohlcv');
+  if ($('src-news').checked)     sources.push('news');
+  if ($('src-reddit').checked)   sources.push('reddit');
+  if ($('src-earnings').checked) sources.push('earnings');
+  await startBackfillFor(symbols, sources);
+}
+
+async function startBackfillFor(syms, sources) {
+  connectTrainingWs();
+  switchTab('log', document.querySelector('.tab'));
+  resetJobUI();
+  setJobStatus('running');
+
+  const r = await fetch(`${API}/training/backfill`, {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      symbols: syms, sources,
+      years:   parseInt($('years-range').value),
+      hourly:  $('src-hourly').checked,
+    }),
+  });
+  const d = await r.json();
+  job.id = d.job_id;
+  appendLog(`Job ${d.job_id.slice(0,8)}… queued for: ${syms.join(', ')}`, 'info');
+}
+
+// ── Training ───────────────────────────────────────────────────────────────
+async function startTraining() {
+  if (!symbols.length) { alert('Add at least one symbol'); return; }
+  connectTrainingWs();
+  switchTab('log', document.querySelector('.tab'));
+  resetJobUI();
+  setJobStatus('running');
+
+  const tf = document.querySelector('input[name="tf"]:checked').value;
+  const r  = await fetch(`${API}/training/train`, {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ symbols, timeframe: tf, years: parseInt($('years-range').value) }),
+  });
+  const d = await r.json();
+  job.id = d.job_id;
+  appendLog(`Training job ${d.job_id.slice(0,8)}… queued`, 'info');
+}
+
+// ── Backtest ───────────────────────────────────────────────────────────────
+async function startBacktest() {
+  const sym = $('bt-sym-sel').value;
+  const tf  = $('bt-tf-sel').value;
+  if (!sym) { alert('Select a symbol'); return; }
+  connectTrainingWs();
+  switchTab('log', document.querySelector('.tab'));
+  resetJobUI();
+  setJobStatus('running');
+  appendLog(`Running backtest: ${sym} (${tf})…`, 'info');
+  await fetch(`${API}/training/backtest?symbol=${sym}&timeframe=${tf}`, { method: 'POST' });
+}
+
+// ── Models panel ───────────────────────────────────────────────────────────
+async function refreshModels() {
+  const r = await fetch(`${API}/training/models`);
+  const models = await r.json();
+  const grid = $('model-grid');
+  if (!models.length) { grid.innerHTML = '<div class="empty">No models trained yet.</div>'; return; }
+
+  const now = Date.now();
+  grid.innerHTML = models.map(m => {
+    const trained = m.trained_at ? new Date(m.trained_at) : null;
+    const ageDays = trained ? Math.floor((now - trained) / 86400000) : null;
+    const isStale = ageDays !== null && ageDays > 30;
+    const testAcc = m.test_accuracy ? `${(m.test_accuracy*100).toFixed(1)}%` : '—';
+    const liveAcc = m.live_accuracy ? `${(m.live_accuracy*100).toFixed(1)}%` : 'No live data yet';
+    return `
+      <div class="model-card">
+        <div class="mc-sym">${m.symbol}</div>
+        <div class="mc-tf">${m.timeframe.toUpperCase()} · v${m.version}</div>
+        <div class="mc-stat">Test accuracy: <strong>${testAcc}</strong></div>
+        <div class="mc-stat">Live accuracy: <span>${liveAcc}</span></div>
+        <div class="mc-stat">Trained: <span>${trained ? trained.toLocaleDateString() : '—'}${ageDays !== null ? ` (${ageDays}d ago)` : ''}</span></div>
+        <div class="mc-badge ${isStale ? 'badge-stale' : 'badge-active'}">${isStale ? '⚠ STALE' : '✓ ACTIVE'}</div>
+        <div class="mc-actions">
+          <button class="mc-btn" onclick="runRetrainFor('${m.symbol}','${m.timeframe}')">Retrain</button>
+          <button class="mc-btn" onclick="runBacktestFor('${m.symbol}','${m.timeframe}')">Backtest</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+async function runRetrainFor(sym, tf) {
+  symbols = [sym];
+  renderChips();
+  document.querySelector(`input[name="tf"][value="${tf}"]`).checked = true;
+  await startTraining();
+}
+async function runBacktestFor(sym, tf) {
+  $('bt-sym-sel').value = sym;
+  $('bt-tf-sel').value  = tf;
+  await startBacktest();
+}
+
+// ── Backtests panel ────────────────────────────────────────────────────────
+async function refreshBacktests() {
+  const r = await fetch(`${API}/training/backtests`);
+  const bts = await r.json();
+  const el = $('bt-list');
+  if (!bts.length) { el.innerHTML = '<div class="empty">No backtests yet.</div>'; return; }
+
+  el.innerHTML = bts.map(b => {
+    const ret   = b.total_return;
+    const alpha = b.alpha;
+    const cls   = ret >= 0 ? 'pos' : 'neg';
+    return `
+      <div class="bt-list-item" onclick="loadBacktestDetail(${b.id})">
+        <div class="bt-left">
+          <div class="bt-sym">${b.symbol}</div>
+          <div>
+            <div style="font-size:11px">${b.timeframe.toUpperCase()} · ${b.start_date?.split('T')[0]} → ${b.end_date?.split('T')[0]}</div>
+            <div class="bt-meta">${b.total_trades} trades · Win rate: ${b.win_rate}% · Sharpe: ${b.sharpe_ratio}</div>
+          </div>
+        </div>
+        <div style="text-align:right">
+          <div class="${cls}" style="font-size:16px;font-weight:900">${ret >= 0 ? '+' : ''}${ret}%</div>
+          <div style="font-size:10px;color:var(--muted)">α ${alpha >= 0 ? '+' : ''}${alpha}% vs B&H</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+async function loadBacktestDetail(id) {
+  $('bt-detail').style.display = 'none';
+  const r = await fetch(`${API}/training/backtests/${id}`);
+  const b = await r.json();
+
+  $('bt-detail-title').textContent = `${b.symbol} (${b.timeframe})`;
+
+  const fmtUSD = n => n == null ? '—' : new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(n);
+  const cls = n => n >= 0 ? 'pos' : 'neg';
+
+  $('bt-stats').innerHTML = `
+    <div class="bt-stat"><label>TOTAL RETURN</label><div class="v ${cls(b.total_return)}">${b.total_return >= 0 ? '+' : ''}${b.total_return}%</div></div>
+    <div class="bt-stat"><label>BUY & HOLD</label><div class="v ${cls(b.benchmark_return)}">${b.benchmark_return}%</div></div>
+    <div class="bt-stat"><label>ALPHA</label><div class="v ${cls(b.alpha)}">${b.alpha >= 0 ? '+' : ''}${b.alpha}%</div></div>
+    <div class="bt-stat"><label>WIN RATE</label><div class="v ${b.win_rate >= 50 ? 'pos' : 'neg'}">${b.win_rate}%</div></div>
+    <div class="bt-stat"><label>SHARPE</label><div class="v ${b.sharpe_ratio >= 1 ? 'pos' : 'neu'}">${b.sharpe_ratio}</div></div>
+    <div class="bt-stat"><label>MAX DRAWDOWN</label><div class="v neg">${b.max_drawdown}%</div></div>
+    <div class="bt-stat"><label>TOTAL TRADES</label><div class="v acc">${b.total_trades}</div></div>
+  `;
+
+  // Equity curve
+  if (equityChart) equityChart.destroy();
+  const eq  = b.equity_curve || [];
+  const ctx = $('bt-equity-chart').getContext('2d');
+  equityChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: eq.map(e => e.date),
+      datasets: [{
+        data: eq.map(e => e.equity),
+        borderColor: b.total_return >= 0 ? '#22c55e' : '#ef4444',
+        backgroundColor: b.total_return >= 0 ? 'rgba(34,197,94,.08)' : 'rgba(239,68,68,.08)',
+        fill: true, tension: 0.3, pointRadius: 0,
+      }]
+    },
+    options: {
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color:'#64748b', maxTicksLimit: 8, font:{size:9} }, grid: { color:'#1e2330' } },
+        y: { ticks: { color:'#64748b', font:{size:9}, callback: v => '$'+v.toLocaleString() }, grid: { color:'#1e2330' } },
+      }
+    }
+  });
+
+  // Trade P&L distribution
+  if (distChart) distChart.destroy();
+  const trades = b.trades || [];
+  const wins   = trades.filter(t => t.pnl > 0).length;
+  const losses = trades.filter(t => t.pnl <= 0).length;
+  const ctx2   = $('bt-dist-chart').getContext('2d');
+  distChart = new Chart(ctx2, {
+    type: 'doughnut',
+    data: {
+      labels: ['Wins', 'Losses'],
+      datasets: [{ data: [wins, losses], backgroundColor: ['#22c55e','#ef4444'], borderColor:'#0d0f14', borderWidth:3 }]
+    },
+    options: {
+      cutout: '65%',
+      plugins: { legend: { display: true, position: 'bottom', labels: { color:'#64748b', font:{size:10}, boxWidth:10 } } }
+    }
+  });
+
+  $('bt-detail').style.display = 'block';
+}
+
+function refreshBacktestSelector() {
+  const sel = $('bt-sym-sel');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">Select symbol…</option>' +
+    symbols.map(s => `<option value="${s}" ${s===cur?'selected':''}>${s}</option>`).join('');
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────
+connectTrainingWs();
+refreshModels();
+refreshBacktests();
+</script>
+</body>
+</html>

@@ -1,0 +1,1037 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Hedge Bot — Insider Tracker</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg:#0d0f14; --surface:#161a22; --surface2:#1e2330;
+  --border:#2a2f3d; --accent:#3b82f6; --green:#22c55e;
+  --red:#ef4444; --yellow:#f59e0b; --purple:#a78bfa;
+  --text:#e2e8f0; --muted:#64748b;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono','Fira Code',monospace;font-size:13px;min-height:100vh;}
+
+header{display:flex;align-items:center;justify-content:space-between;padding:13px 24px;background:var(--surface);border-bottom:1px solid var(--border);}
+header h1{font-size:15px;letter-spacing:2px;color:var(--accent);}
+.nav-btns{display:flex;gap:8px;}
+.nav-btn{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 14px;border-radius:6px;cursor:pointer;font-family:inherit;font-size:12px;text-decoration:none;}
+.nav-btn:hover{border-color:var(--accent);color:var(--accent);}
+
+.layout{display:grid;grid-template-columns:300px 1fr;min-height:calc(100vh - 55px);}
+
+/* ── Left sidebar ── */
+.sidebar{border-right:1px solid var(--border);padding:18px;overflow-y:auto;background:var(--surface);}
+.sb-title{font-size:9px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-bottom:10px;}
+
+.search-row{display:flex;gap:8px;margin-bottom:14px;}
+.search-row input{flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:6px;font-family:inherit;font-size:12px;}
+.search-row button{background:var(--accent);border:none;color:#fff;padding:7px 14px;border-radius:6px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:700;}
+
+.result-list{display:flex;flex-direction:column;gap:6px;margin-bottom:18px;}
+.result-item{background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:10px;cursor:pointer;transition:border-color .15s;}
+.result-item:hover{border-color:var(--accent);}
+.result-item .ri-name{font-weight:700;font-size:12px;}
+.result-item .ri-meta{font-size:10px;color:var(--muted);margin-top:2px;}
+
+.watchlist-items{display:flex;flex-direction:column;gap:6px;}
+.wl-item{background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:10px;display:flex;align-items:center;justify-content:space-between;}
+.wl-name{font-weight:700;font-size:12px;cursor:pointer;}
+.wl-name:hover{color:var(--accent);}
+.wl-remove{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:0;}
+.wl-remove:hover{color:var(--red);}
+
+/* ── Backfill controls in sidebar ── */
+.backfill-row{display:flex;gap:8px;margin-bottom:8px;}
+.backfill-row input{flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:6px;font-family:inherit;font-size:11px;}
+.backfill-row button{background:var(--surface2);border:1px solid var(--border);color:var(--muted);padding:6px 10px;border-radius:6px;cursor:pointer;font-family:inherit;font-size:10px;font-weight:700;white-space:nowrap;}
+.backfill-row button:hover{border-color:var(--accent);color:var(--accent);}
+
+/* ── Main content ── */
+.main{padding:20px;overflow-y:auto;}
+
+/* Profile header */
+.profile-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px;}
+.ph-left .ph-name{font-size:22px;font-weight:900;}
+.ph-left .ph-cik{font-size:10px;color:var(--muted);margin-top:2px;}
+.ph-left .ph-companies{font-size:11px;color:var(--muted);margin-top:4px;}
+.ph-right{display:flex;gap:10px;}
+.watch-btn{background:var(--surface2);border:1px solid var(--border);padding:8px 16px;border-radius:7px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:700;color:var(--text);}
+.watch-btn.watching{border-color:var(--green);color:var(--green);}
+.watch-btn:hover{border-color:var(--accent);color:var(--accent);}
+
+/* Stat cards */
+.stat-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:20px;}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;}
+.stat-card label{display:block;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:5px;}
+.stat-card .v{font-size:20px;font-weight:900;}
+.pos{color:var(--green);} .neg{color:var(--red);} .neu{color:var(--yellow);} .acc{color:var(--accent);} .pur{color:var(--purple);}
+
+/* Section */
+.section{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:16px;}
+.section-title{font-size:9px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;}
+
+/* Timeline chart */
+.chart-wrap{height:200px;position:relative;margin-bottom:16px;}
+
+/* Tables */
+.tbl-wrap{overflow-x:auto;}
+table{width:100%;border-collapse:collapse;font-size:11px;}
+th{text-align:left;color:var(--muted);font-size:9px;letter-spacing:1px;padding:6px 8px;border-bottom:1px solid var(--border);white-space:nowrap;}
+td{padding:7px 8px;border-bottom:1px solid #1a1f2e;}
+tr:last-child td{border:none;}
+tr:hover td{background:#1a1f2e;}
+.pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:9px;font-weight:700;}
+.pill-buy{background:#14532d;color:var(--green);}
+.pill-sell{background:#450a0a;color:var(--red);}
+.pill-exercise{background:#2e1065;color:var(--purple);}
+.pill-other{background:var(--surface2);color:var(--muted);}
+.pill-open{background:#1e3a5f;color:var(--accent);}
+.ext-link{color:var(--accent);text-decoration:none;font-size:10px;}
+.ext-link:hover{text-decoration:underline;}
+
+/* Company grid */
+.company-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;}
+.co-card{background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:12px;cursor:pointer;}
+.co-card:hover{border-color:var(--accent);}
+.co-sym{font-size:15px;font-weight:900;}
+.co-title{font-size:10px;color:var(--muted);margin-bottom:6px;}
+.co-val{font-size:12px;}
+
+/* Chat */
+.chat-box{display:flex;flex-direction:column;gap:0;}
+.chat-msgs{height:180px;overflow-y:auto;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:7px 7px 0 0;font-size:11px;line-height:1.7;}
+.chat-user{color:var(--accent);margin-bottom:4px;}
+.chat-ai{color:var(--text);margin-bottom:8px;}
+.chat-meta{font-size:9px;color:var(--muted);}
+.chat-input-row{display:flex;border:1px solid var(--border);border-top:none;border-radius:0 0 7px 7px;overflow:hidden;}
+.chat-input-row input{flex:1;background:var(--surface2);border:none;color:var(--text);padding:8px 12px;font-family:inherit;font-size:12px;}
+.chat-input-row input:focus{outline:none;}
+.chat-input-row button{background:var(--accent);border:none;color:#fff;padding:8px 16px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:700;}
+
+/* Suggested Qs */
+.sq-row{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;}
+.sq{background:var(--surface2);border:1px solid var(--border);color:var(--muted);padding:5px 10px;border-radius:20px;cursor:pointer;font-family:inherit;font-size:10px;}
+.sq:hover{border-color:var(--accent);color:var(--accent);}
+
+/* Empty / loading */
+.empty{text-align:center;padding:60px;color:var(--muted);}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;margin-right:6px;vertical-align:middle;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* ── Connection banner ── */
+#conn-banner{
+  display:none;padding:10px 24px;font-size:12px;font-weight:700;
+  letter-spacing:.5px;align-items:center;gap:12px;
+}
+#conn-banner.offline{background:#450a0a;color:var(--red);display:flex;}
+#conn-banner.warn{background:#422006;color:var(--yellow);display:flex;}
+#conn-banner.ok{background:#14532d;color:var(--green);display:flex;}
+#conn-banner .cb-msg{flex:1;}
+#conn-banner .cb-retry{
+  background:transparent;border:1px solid currentColor;color:inherit;
+  padding:3px 12px;border-radius:5px;cursor:pointer;font-family:inherit;
+  font-size:11px;font-weight:700;
+}
+
+/* ── Toast notifications ── */
+#toast-container{
+  position:fixed;bottom:20px;right:20px;display:flex;
+  flex-direction:column;gap:8px;z-index:999;pointer-events:none;
+}
+.toast{
+  padding:11px 16px;border-radius:8px;font-size:12px;font-weight:700;
+  display:flex;align-items:center;gap:10px;min-width:280px;max-width:400px;
+  pointer-events:all;animation:slideIn .2s ease;
+}
+.toast.error  {background:#450a0a;border:1px solid var(--red);   color:var(--red);}
+.toast.warn   {background:#422006;border:1px solid var(--yellow);color:var(--yellow);}
+.toast.success{background:#14532d;border:1px solid var(--green); color:var(--green);}
+.toast.info   {background:#1e3a5f;border:1px solid var(--accent);color:var(--accent);}
+.toast-msg{flex:1;line-height:1.4;}
+.toast-sub{font-size:10px;font-weight:400;opacity:.8;margin-top:2px;}
+.toast-close{cursor:pointer;opacity:.6;font-size:14px;flex-shrink:0;}
+.toast-close:hover{opacity:1;}
+@keyframes slideIn{from{opacity:0;transform:translateX(20px);}to{opacity:1;transform:none;}}
+
+/* ── Inline error card (inside sidebar / main) ── */
+.err-card{
+  background:#1a0505;border:1px solid var(--red);border-radius:8px;
+  padding:12px 14px;margin-bottom:10px;
+}
+.err-card .ec-title{color:var(--red);font-size:12px;font-weight:700;margin-bottom:4px;}
+.err-card .ec-body{color:#fca5a5;font-size:11px;line-height:1.6;}
+.err-card .ec-action{
+  margin-top:8px;background:transparent;border:1px solid var(--red);
+  color:var(--red);padding:4px 12px;border-radius:5px;cursor:pointer;
+  font-family:inherit;font-size:11px;font-weight:700;
+}
+.err-card .ec-action:hover{background:var(--red);color:#fff;}
+
+/* ── API status dot in header ── */
+.api-dot{
+  width:8px;height:8px;border-radius:50%;display:inline-block;
+  margin-left:6px;vertical-align:middle;
+}
+.api-dot.online {background:var(--green);box-shadow:0 0 6px var(--green);}
+.api-dot.offline{background:var(--red);  box-shadow:0 0 6px var(--red);}
+.api-dot.checking{background:var(--yellow);animation:pulse 1s infinite;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3;}}
+</style>
+</head>
+<body>
+<header>
+  <h1>👤 INSIDER TRACKER <span class="api-dot checking" id="api-dot" title="Checking API…"></span></h1>
+  <div class="nav-btns">
+    <a class="nav-btn" href="data_browser.html">🔍 Data</a>
+    <a class="nav-btn" href="training.html">🧠 Training</a>
+    <a class="nav-btn" href="dashboard.html">⬡ Dashboard</a>
+  </div>
+</header>
+
+<!-- Connection status banner (shown when API is unreachable) -->
+<div id="conn-banner">
+  <span class="cb-msg" id="conn-msg"></span>
+  <button class="cb-retry" onclick="checkApiHealth()">↺ Retry</button>
+</div>
+
+<!-- Toast container -->
+<div id="toast-container"></div>
+
+<div class="layout">
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+
+    <div class="sb-title">Search Insider</div>
+    <div class="search-row">
+      <input id="search-inp" type="text" placeholder="Tim Cook, Elon Musk…"
+        onkeydown="if(event.key==='Enter')searchInsiders()"/>
+      <button onclick="searchInsiders()">GO</button>
+    </div>
+    <div class="result-list" id="search-results"></div>
+
+    <div class="sb-title" style="margin-top:4px">Fetch Form 4 Data</div>
+    <div class="backfill-row">
+      <input id="bf-sym" type="text" placeholder="Ticker (AAPL)"/>
+      <button onclick="backfillSymbol()">By Ticker</button>
+    </div>
+    <div class="backfill-row">
+      <input id="bf-person" type="text" placeholder="Name or CIK"/>
+      <button onclick="backfillPerson()">By Person</button>
+    </div>
+    <div id="bf-status" style="font-size:10px;color:var(--muted);margin-bottom:14px;"></div>
+
+    <!-- ── Discord panel ── -->
+    <div class="sb-title" style="margin-top:10px">
+      Discord Alerts
+      <span class="api-dot checking" id="dc-dot" style="margin-left:6px" title="Checking…"></span>
+    </div>
+    <div id="dc-connected" style="display:none">
+      <div style="font-size:10px;color:var(--green);margin-bottom:8px">
+        ✓ Webhook connected — watchlist alerts active
+      </div>
+      <div style="display:flex;gap:6px;margin-bottom:8px">
+        <button style="flex:1" class="nav-btn" onclick="dcTest()">Test</button>
+        <button style="flex:1" class="nav-btn" onclick="dcScanNow()">Scan now</button>
+        <button class="wl-remove" onclick="dcDisconnect()" title="Disconnect" style="font-size:18px">×</button>
+      </div>
+    </div>
+    <div id="dc-setup">
+      <div style="font-size:10px;color:var(--muted);margin-bottom:6px;line-height:1.5">
+        Paste your Discord channel webhook URL to receive trade alerts.
+        <a href="https://support.discord.com/hc/en-us/articles/228383668" target="_blank"
+           style="color:var(--accent);text-decoration:none"> How?</a>
+      </div>
+      <input id="dc-webhook-inp" type="text"
+        style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);
+               padding:6px 8px;border-radius:6px;font-family:inherit;font-size:11px;margin-bottom:6px"
+        placeholder="https://discord.com/api/webhooks/…"/>
+      <div style="font-size:10px;color:var(--muted);margin-bottom:4px">
+        Bot token <span style="opacity:.6">(optional — for <code>!insider</code> chat)</span>:
+      </div>
+      <input id="dc-token-inp" type="password"
+        style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);
+               padding:6px 8px;border-radius:6px;font-family:inherit;font-size:11px;margin-bottom:8px"
+        placeholder="Paste bot token…"/>
+      <button onclick="dcSave()"
+        style="width:100%;background:var(--accent);border:none;color:#fff;padding:7px;
+               border-radius:6px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:700">
+        Connect Discord
+      </button>
+    </div>
+    <div id="dc-msg" style="font-size:10px;color:var(--muted);margin-top:6px;margin-bottom:4px"></div>
+
+    <div class="sb-title" style="margin-top:10px">Watchlist</div>
+    <div class="watchlist-items" id="watchlist-items">
+      <div style="font-size:11px;color:var(--muted)">No insiders watched yet.</div>
+    </div>
+
+  </div>
+
+  <!-- Main -->
+  <div class="main" id="main">
+    <div class="empty">
+      Search for an insider by name, or click a watchlist entry to view their profile.
+    </div>
+  </div>
+
+</div>
+
+<script>
+const API = 'http://localhost:8000';
+const $ = id => document.getElementById(id);
+let currentProfile = null;
+let timelineChart  = null;
+let apiOnline      = false;
+let healthTimer    = null;
+
+// ── Error classification ───────────────────────────────────────────────────
+const ERR = {
+  API_OFFLINE: {
+    title: 'API Server Offline',
+    body:  'Cannot reach the backend at http://localhost:8000. Make sure the server is running.',
+    fix:   'Run: <code>uvicorn api.main:app --reload</code> in the hedge_bot directory.',
+    retry: true,
+  },
+  NO_DATA: {
+    title: 'No Data Found',
+    body:  'No insider records exist for this query. Form 4 data needs to be fetched first.',
+    fix:   'Use the "Fetch Form 4 Data" section in the sidebar to backfill insider trades.',
+    retry: false,
+  },
+  EDGAR_RATE: {
+    title: 'SEC EDGAR Rate Limited',
+    body:  'EDGAR throttled the request (429). SEC allows 10 requests/second.',
+    fix:   'Wait 30 seconds and try again. The backfill script will retry automatically.',
+    retry: true,
+  },
+  NOT_FOUND: {
+    title: 'Insider Not Found',
+    body:  'This insider CIK could not be resolved in our database.',
+    fix:   'Try searching by name, or backfill by entering their name in the "By Person" field.',
+    retry: false,
+  },
+  SERVER_ERR: {
+    title: 'Server Error',
+    body:  'The API returned an unexpected error.',
+    fix:   'Check the terminal where uvicorn is running for the full traceback.',
+    retry: true,
+  },
+  LLM_OFFLINE: {
+    title: 'Ollama LLM Offline',
+    body:  'The local LLM is not responding. Chat requires Ollama to be running.',
+    fix:   'Run: <code>ollama serve</code> — or check that the model is pulled: <code>ollama pull llama3.1:8b</code>',
+    retry: false,
+  },
+  NETWORK: {
+    title: 'Network Error',
+    body:  'The request could not be completed due to a network issue.',
+    fix:   'Check your connection and that the API server is reachable.',
+    retry: true,
+  },
+};
+
+function classifyError(err, status) {
+  if (!status && err?.message?.includes('fetch'))   return ERR.API_OFFLINE;
+  if (status === 429)  return ERR.EDGAR_RATE;
+  if (status === 404)  return ERR.NOT_FOUND;
+  if (status >= 500)   return ERR.SERVER_ERR;
+  if (err?.message?.toLowerCase().includes('ollama') ||
+      err?.message?.toLowerCase().includes('llm'))  return ERR.LLM_OFFLINE;
+  return ERR.NETWORK;
+}
+
+// ── Toast system ───────────────────────────────────────────────────────────
+let toastId = 0;
+function toast(type, title, subtitle = '', duration = 5000) {
+  const id  = ++toastId;
+  const el  = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.id = `toast-${id}`;
+  el.innerHTML = `
+    <div class="toast-msg">
+      <div>${title}</div>
+      ${subtitle ? `<div class="toast-sub">${subtitle}</div>` : ''}
+    </div>
+    <span class="toast-close" onclick="dismissToast(${id})">×</span>`;
+  $('toast-container').appendChild(el);
+  if (duration > 0) setTimeout(() => dismissToast(id), duration);
+  return id;
+}
+
+function dismissToast(id) {
+  const el = $(`toast-${id}`);
+  if (el) el.remove();
+}
+
+// ── Connection banner ──────────────────────────────────────────────────────
+function setBanner(type, msg) {
+  const b = $('conn-banner');
+  b.className = type;                       // 'offline' | 'warn' | 'ok' | ''
+  $('conn-msg').innerHTML = msg;
+  if (type === '') b.style.display = 'none';
+}
+
+function setApiDot(state) {
+  const dot = $('api-dot');
+  dot.className = `api-dot ${state}`;
+  dot.title = state === 'online'   ? 'API online'
+            : state === 'offline'  ? 'API offline — click retry in banner'
+            : 'Checking API…';
+}
+
+// ── API health check ───────────────────────────────────────────────────────
+async function checkApiHealth(silent = false) {
+  setApiDot('checking');
+  try {
+    const r = await fetch(`${API}/health`, { signal: AbortSignal.timeout(4000) });
+    if (r.ok) {
+      const d = await r.json();
+      apiOnline = true;
+      setApiDot('online');
+      setBanner('', '');
+      if (!silent) {
+        toast('success', 'API connected',
+          `Model: ${d.model || '—'} · Trading: ${d.trading_halted ? 'HALTED' : 'active'}`, 3000);
+      }
+      // Load watchlist + Discord status now that API is up
+      await refreshWatchlist();
+      await dcRefresh();
+    } else {
+      throw new Error(`HTTP ${r.status}`);
+    }
+  } catch(e) {
+    apiOnline = false;
+    setApiDot('offline');
+    setBanner('offline',
+      '⚠ API server is offline — cannot reach http://localhost:8000 &nbsp;|&nbsp; ' +
+      'Start it with: <code style="background:#5a0a0a;padding:1px 6px;border-radius:3px">uvicorn api.main:app --reload</code>'
+    );
+    $('watchlist-items').innerHTML = renderErrCard(
+      ERR.API_OFFLINE, () => checkApiHealth()
+    );
+  }
+}
+
+// ── Safe fetch wrapper ─────────────────────────────────────────────────────
+async function apiCall(url, options = {}) {
+  if (!apiOnline) {
+    throw { classified: ERR.API_OFFLINE, status: 0 };
+  }
+  try {
+    const r = await fetch(url, {
+      ...options,
+      signal: AbortSignal.timeout(20000),
+    });
+    if (!r.ok) {
+      let body = '';
+      try { body = await r.text(); } catch(_) {}
+      throw { classified: classifyError(null, r.status), status: r.status, body };
+    }
+    return await r.json();
+  } catch(e) {
+    if (e.classified) throw e;
+    // Fetch failed (network error / timeout)
+    const classified = classifyError(e, null);
+    if (classified === ERR.API_OFFLINE) {
+      apiOnline = false;
+      setApiDot('offline');
+      setBanner('offline',
+        '⚠ Connection lost — API went offline &nbsp;|&nbsp; <code>uvicorn api.main:app --reload</code>'
+      );
+    }
+    throw { classified, status: 0, original: e };
+  }
+}
+
+// ── Inline error card renderer ─────────────────────────────────────────────
+function renderErrCard(err, retryFn = null) {
+  const retryId = `retry-${Math.random().toString(36).slice(2)}`;
+  const html = `
+    <div class="err-card">
+      <div class="ec-title">⚠ ${err.title}</div>
+      <div class="ec-body">
+        ${err.body}<br/>
+        <span style="color:var(--muted)">${err.fix}</span>
+      </div>
+      ${err.retry && retryFn ? `<button class="ec-action" id="${retryId}">↺ Retry</button>` : ''}
+    </div>`;
+  // Register retry handler after render
+  if (err.retry && retryFn) {
+    setTimeout(() => {
+      const btn = document.getElementById(retryId);
+      if (btn) btn.onclick = retryFn;
+    }, 0);
+  }
+  return html;
+}
+
+// ── Search ─────────────────────────────────────────────────────────────────
+async function searchInsiders() {
+  const name = $('search-inp').value.trim();
+  if (!name) return;
+  const el  = $('search-results');
+  el.innerHTML = '<div style="font-size:11px;color:var(--muted)"><span class="spinner"></span>Searching…</div>';
+
+  try {
+    const results = await apiCall(`${API}/insider/search?name=${encodeURIComponent(name)}`);
+    if (!results.length) {
+      el.innerHTML = `
+        <div style="font-size:11px;color:var(--muted);margin-bottom:8px">
+          No results for "<strong>${name}</strong>" in the database.
+        </div>
+        ${renderErrCard(ERR.NO_DATA)}`;
+      return;
+    }
+    el.innerHTML = results.map(r => `
+      <div class="result-item" onclick="loadProfile('${r.cik}')">
+        <div class="ri-name">${r.name_clean || r.name}</div>
+        <div class="ri-meta">CIK: ${r.cik}${r.companies?.length ? ' · ' + r.companies.map(c=>c.symbol).join(', ') : ''}</div>
+      </div>`).join('');
+  } catch(e) {
+    el.innerHTML = renderErrCard(e.classified || ERR.NETWORK, searchInsiders);
+    toast('error', e.classified?.title || 'Search failed',
+          e.classified?.body || e.original?.message || '');
+  }
+}
+
+// ── Watchlist ──────────────────────────────────────────────────────────────
+async function refreshWatchlist() {
+  const el = $('watchlist-items');
+  try {
+    const wl = await apiCall(`${API}/insider/watchlist`);
+    if (!wl.length) {
+      el.innerHTML = '<div style="font-size:11px;color:var(--muted)">No insiders watched yet.</div>';
+      return;
+    }
+    el.innerHTML = wl.map(w => `
+      <div class="wl-item">
+        <span class="wl-name" onclick="loadProfile('${w.cik}')">${w.name_clean || w.cik}</span>
+        <button class="wl-remove" onclick="unwatch('${w.cik}')" title="Remove">×</button>
+      </div>`).join('');
+  } catch(e) {
+    // Silently degrade — show placeholder, don't spam errors on load
+    el.innerHTML = '<div style="font-size:11px;color:var(--muted)">Watchlist unavailable — API offline.</div>';
+  }
+}
+
+async function watchInsider(cik, nameClean) {
+  try {
+    await apiCall(`${API}/insider/watch`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ cik, name_clean: nameClean }),
+    });
+    toast('success', `Now watching ${nameClean || cik}`, '', 3000);
+    await refreshWatchlist();
+  } catch(e) {
+    toast('error', 'Could not add to watchlist', e.classified?.body || '');
+  }
+}
+
+async function unwatch(cik) {
+  try {
+    await apiCall(`${API}/insider/watch/${cik}`, { method: 'DELETE' });
+    toast('info', 'Removed from watchlist', '', 2500);
+    await refreshWatchlist();
+    const btn = $('watch-btn');
+    if (btn) { btn.textContent = '+ Watch'; btn.classList.remove('watching'); }
+  } catch(e) {
+    toast('error', 'Could not remove from watchlist', e.classified?.body || '');
+  }
+}
+
+// ── Load profile ───────────────────────────────────────────────────────────
+async function loadProfile(cik) {
+  $('main').innerHTML = '<div class="empty"><span class="spinner"></span>Loading profile…</div>';
+  try {
+    const data = await apiCall(`${API}/insider/person/${cik}`);
+    if (!data.trades?.length && !data.portfolio?.length) {
+      $('main').innerHTML = `
+        <div style="padding:20px">
+          ${renderErrCard(ERR.NO_DATA, () => loadProfile(cik))}
+          <div style="font-size:11px;color:var(--muted);margin-top:8px">
+            CIK <strong>${cik}</strong> exists in the registry but has no transaction data yet.
+            Run a Form 4 backfill first.
+          </div>
+        </div>`;
+      return;
+    }
+    currentProfile = data;
+    renderProfile(data);
+  } catch(e) {
+    const err = e.classified || ERR.NETWORK;
+    $('main').innerHTML = `<div style="padding:20px">${renderErrCard(err, () => loadProfile(cik))}</div>`;
+    toast('error', err.title, err.body);
+  }
+}
+
+function renderProfile(data) {
+  const ins    = data.insider || {};
+  const trades = data.trades  || [];
+  const port   = data.portfolio || [];
+  const stats  = data.stats   || [];
+  const name   = ins.name_clean || ins.name || ins.cik;
+
+  // Open-market trades only for stats
+  const openTrades = trades.filter(t => t.is_open_market);
+  const buys       = openTrades.filter(t => t.transaction_type === 'Buy');
+  const sells      = openTrades.filter(t => t.transaction_type === 'Sell');
+  const totalBuyVal  = buys.reduce((s,t) => s + (t.total_value||0), 0);
+  const totalSellVal = sells.reduce((s,t) => s + (t.total_value||0), 0);
+  const netVal       = totalBuyVal - totalSellVal;
+
+  const companies = ins.companies || [];
+  const coList    = [...new Set(companies.map(c => c.symbol))].filter(Boolean).join(', ') || '—';
+
+  $('main').innerHTML = `
+    <!-- Profile header -->
+    <div class="profile-header">
+      <div class="ph-left">
+        <div class="ph-name">${name}</div>
+        <div class="ph-cik">SEC CIK: ${ins.cik || '—'}</div>
+        <div class="ph-companies">Companies: ${coList}</div>
+      </div>
+      <div class="ph-right">
+        <button class="watch-btn" id="watch-btn" onclick="toggleWatch('${ins.cik}','${name}')">
+          + Watch
+        </button>
+      </div>
+    </div>
+
+    <!-- Summary stats -->
+    <div class="stat-row">
+      <div class="stat-card"><label>OPEN BUYS</label>
+        <div class="v pos">${buys.length}</div></div>
+      <div class="stat-card"><label>OPEN SELLS</label>
+        <div class="v neg">${sells.length}</div></div>
+      <div class="stat-card"><label>BUY VALUE</label>
+        <div class="v pos">${fmtUSD(totalBuyVal)}</div></div>
+      <div class="stat-card"><label>SELL VALUE</label>
+        <div class="v neg">${fmtUSD(totalSellVal)}</div></div>
+      <div class="stat-card"><label>NET POSITION</label>
+        <div class="v ${netVal>=0?'pos':'neg'}">${netVal>=0?'+':''}${fmtUSD(netVal)}</div></div>
+      <div class="stat-card"><label>COMPANIES</label>
+        <div class="v acc">${new Set(trades.map(t=>t.symbol)).size}</div></div>
+      <div class="stat-card"><label>TOTAL FILINGS</label>
+        <div class="v pur">${trades.length}</div></div>
+    </div>
+
+    <!-- Transaction timeline chart -->
+    <div class="section">
+      <div class="section-title">Open-Market Transaction Timeline
+        <span style="font-size:10px;font-weight:400;color:var(--muted)">P=Buy · S=Sell</span>
+      </div>
+      <div class="chart-wrap"><canvas id="timeline-chart"></canvas></div>
+    </div>
+
+    <!-- Portfolio (current holdings) -->
+    ${port.length ? `
+    <div class="section">
+      <div class="section-title">Holdings (latest Form 4 per company)</div>
+      <div class="company-grid">
+        ${port.map(p => `
+          <div class="co-card" onclick="window.open('data_browser.html?symbol=${p.symbol}','_blank')">
+            <div class="co-sym">${p.symbol}</div>
+            <div class="co-title">${p.title || '—'}</div>
+            <div class="co-val">${fmtN(p.shares_owned)} shares</div>
+            <div class="co-val" style="color:var(--muted);font-size:10px">
+              ${p.est_value ? '≈' + fmtUSD(p.est_value) : '—'}<br/>
+              as of ${p.as_of?.split('T')[0] || '—'}
+            </div>
+          </div>`).join('')}
+      </div>
+    </div>` : ''}
+
+    <!-- Activity by company -->
+    ${stats.length ? `
+    <div class="section">
+      <div class="section-title">Activity by Company</div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr>
+            <th>SYMBOL</th><th>OPEN BUYS</th><th>OPEN SELLS</th>
+            <th>BUY VALUE</th><th>SELL VALUE</th><th>NET</th><th>LAST TRADE</th>
+          </tr></thead>
+          <tbody>${stats.map(s => `<tr>
+            <td><strong>${s.symbol}</strong></td>
+            <td class="pos">${s.open_buys}</td>
+            <td class="neg">${s.open_sells}</td>
+            <td class="pos">${fmtUSD(s.buy_value)}</td>
+            <td class="neg">${fmtUSD(s.sell_value)}</td>
+            <td class="${s.net_value>=0?'pos':'neg'}">${s.net_value>=0?'+':''}${fmtUSD(s.net_value)}</td>
+            <td style="color:var(--muted)">${s.last_tx_date?.split('T')[0]||'—'}</td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </div>
+    </div>` : ''}
+
+    <!-- All transactions -->
+    <div class="section">
+      <div class="section-title">All Transactions (${trades.length} total)
+        <span id="open-filter-toggle" style="cursor:pointer;font-size:10px;font-weight:400;color:var(--accent)"
+          onclick="toggleOpenOnly()">Show open-market only</span>
+      </div>
+      <div class="tbl-wrap" id="trades-table-wrap">
+        ${renderTradesTable(trades, false)}
+      </div>
+    </div>
+
+    <!-- LLM Chat -->
+    <div class="section">
+      <div class="section-title">Ask About ${name}'s Trades</div>
+      <div class="sq-row">
+        <span class="sq" onclick="askInsider('Has ${name} been a net buyer or seller recently?')">Net buyer or seller?</span>
+        <span class="sq" onclick="askInsider('What are the largest single transactions?')">Largest transactions</span>
+        <span class="sq" onclick="askInsider('Any unusual buying patterns before earnings?')">Patterns before earnings</span>
+        <span class="sq" onclick="askInsider('Which company does ${name} trade most?')">Most active company</span>
+        <span class="sq" onclick="askInsider('Has ${name} ever made open-market purchases, or only exercised options?')">Open buys vs options</span>
+      </div>
+      <div class="chat-box">
+        <div class="chat-msgs" id="chat-msgs">
+          <div style="color:var(--muted)">Ask anything about this insider's Form 4 history…</div>
+        </div>
+        <div class="chat-input-row">
+          <input id="chat-inp" type="text" placeholder="Ask about trades…"
+            onkeydown="if(event.key==='Enter')sendInsiderChat()"/>
+          <button onclick="sendInsiderChat()">➤</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Update watch button state
+  checkWatchState(ins.cik);
+
+  // Draw timeline chart
+  drawTimeline(openTrades);
+}
+
+// ── Timeline chart ─────────────────────────────────────────────────────────
+function drawTimeline(trades) {
+  if (timelineChart) { timelineChart.destroy(); timelineChart = null; }
+  const ctx = $('timeline-chart')?.getContext('2d');
+  if (!ctx || !trades.length) return;
+
+  const buys  = trades.filter(t => t.transaction_type === 'Buy')
+    .map(t => ({ x: t.transaction_date?.split('T')[0], y: t.total_value || 0 }));
+  const sells = trades.filter(t => t.transaction_type === 'Sell')
+    .map(t => ({ x: t.transaction_date?.split('T')[0], y: -(t.total_value || 0) }));
+
+  timelineChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      datasets: [
+        { label: 'Buy ($)', data: buys,  backgroundColor: 'rgba(34,197,94,.7)',  borderRadius: 3 },
+        { label: 'Sell ($)', data: sells, backgroundColor: 'rgba(239,68,68,.7)', borderRadius: 3 },
+      ]
+    },
+    options: {
+      plugins: { legend: { display: true, labels: { color:'#64748b', font:{size:10}, boxWidth:10 } } },
+      scales: {
+        x: { type: 'time', time: { unit: 'month' },
+             ticks: { color:'#64748b', font:{size:9} }, grid:{color:'#1e2330'} },
+        y: { ticks: { color:'#64748b', font:{size:9},
+             callback: v => '$' + Math.abs(v/1000).toFixed(0) + 'K' }, grid:{color:'#1e2330'} },
+      }
+    }
+  });
+}
+
+// ── Trades table ───────────────────────────────────────────────────────────
+let showOpenOnly = false;
+function toggleOpenOnly() {
+  showOpenOnly = !showOpenOnly;
+  $('open-filter-toggle').textContent = showOpenOnly ? 'Show all' : 'Show open-market only';
+  const trades = currentProfile?.trades || [];
+  $('trades-table-wrap').innerHTML = renderTradesTable(trades, showOpenOnly);
+}
+
+function renderTradesTable(trades, openOnly) {
+  const filtered = openOnly ? trades.filter(t => t.is_open_market) : trades;
+  if (!filtered.length) return '<div class="empty">No transactions.</div>';
+  return `<table>
+    <thead><tr>
+      <th>DATE</th><th>SYMBOL</th><th>TYPE</th><th>CODE</th>
+      <th>SHARES</th><th>PRICE</th><th>VALUE</th><th>OWNED AFTER</th><th>TITLE</th><th>FILING</th>
+    </tr></thead>
+    <tbody>${filtered.map(t => {
+      const typePill = t.transaction_type === 'Buy'      ? 'pill-buy'
+                     : t.transaction_type === 'Sell'     ? 'pill-sell'
+                     : t.transaction_type === 'Exercise' ? 'pill-exercise'
+                     : 'pill-other';
+      return `<tr>
+        <td style="color:var(--muted)">${t.transaction_date?.split('T')[0]||t.filed_date?.split('T')[0]||'—'}</td>
+        <td><strong>${t.symbol||'—'}</strong></td>
+        <td><span class="pill ${typePill}">${t.transaction_type||'—'}</span>
+            ${t.is_open_market ? '<span class="pill pill-open" style="margin-left:2px">OPEN</span>' : ''}</td>
+        <td style="color:var(--muted)">${t.transaction_code||'—'}</td>
+        <td>${t.shares != null ? fmtN(t.shares) : '—'}</td>
+        <td>${t.price_per_share != null ? '$'+t.price_per_share.toFixed(2) : '—'}</td>
+        <td class="${t.transaction_type==='Buy'?'pos':t.transaction_type==='Sell'?'neg':''}">${t.total_value != null ? fmtUSD(t.total_value) : '—'}</td>
+        <td style="color:var(--muted)">${t.shares_owned_after != null ? fmtN(t.shares_owned_after) : '—'}</td>
+        <td style="color:var(--muted);font-size:10px">${t.insider_title||'—'}</td>
+        <td>${t.filing_url ? `<a class="ext-link" href="${t.filing_url}" target="_blank">EDGAR ↗</a>` : '—'}</td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+}
+
+// ── Watch toggle ───────────────────────────────────────────────────────────
+async function checkWatchState(cik) {
+  try {
+    const wl  = await apiCall(`${API}/insider/watchlist`);
+    const btn = $('watch-btn');
+    if (!btn || !cik) return;
+    const watching = wl.some(w => w.cik === cik);
+    btn.textContent = watching ? '✓ Watching' : '+ Watch';
+    btn.className   = `watch-btn${watching ? ' watching' : ''}`;
+  } catch(_) {}   // non-critical — don't surface this error
+}
+
+async function toggleWatch(cik, name) {
+  try {
+    const wl       = await apiCall(`${API}/insider/watchlist`);
+    const watching = wl.some(w => w.cik === cik);
+    if (watching) {
+      await unwatch(cik);
+    } else {
+      await watchInsider(cik, name);
+      const btn = $('watch-btn');
+      if (btn) { btn.textContent = '✓ Watching'; btn.classList.add('watching'); }
+    }
+  } catch(e) {
+    toast('error', 'Watch action failed', e.classified?.body || '');
+  }
+}
+
+// ── Backfill triggers ──────────────────────────────────────────────────────
+function setBfStatus(msg, type = 'info') {
+  const el    = $('bf-status');
+  const color = type === 'error' ? 'var(--red)' : type === 'ok' ? 'var(--green)' : 'var(--muted)';
+  el.innerHTML = `<span style="color:${color}">${msg}</span>`;
+}
+
+async function backfillSymbol() {
+  const sym = $('bf-sym').value.trim().toUpperCase();
+  if (!sym) { toast('warn', 'Enter a ticker symbol first', 'e.g. AAPL, TSLA'); return; }
+  if (!apiOnline) { toast('error', ERR.API_OFFLINE.title, ERR.API_OFFLINE.fix); return; }
+
+  setBfStatus(`⏳ Queuing Form 4 backfill for ${sym}…`);
+  try {
+    const d = await apiCall(`${API}/insider/backfill/symbol`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ symbols: [sym] }),
+    });
+    setBfStatus(`✓ Job ${d.job_id?.slice(0,8)}… queued — view progress in Training tab`, 'ok');
+    toast('success', `Backfill started for ${sym}`,
+          'Open the 🧠 Training tab to monitor progress.', 6000);
+  } catch(e) {
+    const err = e.classified || ERR.NETWORK;
+    setBfStatus(`✖ ${err.title}`, 'error');
+    toast('error', err.title, err.body);
+  }
+}
+
+async function backfillPerson() {
+  const val = $('bf-person').value.trim();
+  if (!val) { toast('warn', 'Enter a name or CIK first', 'e.g. Tim Cook  or  0001513362'); return; }
+  if (!apiOnline) { toast('error', ERR.API_OFFLINE.title, ERR.API_OFFLINE.fix); return; }
+
+  setBfStatus(`⏳ Resolving "${val}" on SEC EDGAR…`);
+  try {
+    const d = await apiCall(`${API}/insider/backfill/person`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ name_or_cik: val }),
+    });
+    setBfStatus(`✓ Job ${d.job_id?.slice(0,8)}… queued`, 'ok');
+    toast('success', `Backfill started for "${val}"`,
+          'This may take a few minutes. Check the 🧠 Training tab for live progress.', 7000);
+    // Auto-search once job finishes (poll every 5s, give up after 3 min)
+    const pollStart = Date.now();
+    const poll = setInterval(async () => {
+      if (Date.now() - pollStart > 180_000) { clearInterval(poll); return; }
+      try {
+        const status = await apiCall(`${API}/training/jobs/${d.job_id}`);
+        if (status.status === 'completed') {
+          clearInterval(poll);
+          setBfStatus(`✓ Backfill complete — searching for "${val}"…`, 'ok');
+          $('search-inp').value = val;
+          await searchInsiders();
+        } else if (status.status === 'error') {
+          clearInterval(poll);
+          setBfStatus(`✖ Backfill failed: ${status.error}`, 'error');
+          toast('error', 'Backfill failed', status.error || '');
+        }
+      } catch(_) { clearInterval(poll); }
+    }, 5000);
+  } catch(e) {
+    const err = e.classified || ERR.NETWORK;
+    setBfStatus(`✖ ${err.title}`, 'error');
+    // Special message if EDGAR couldn't find the person
+    if (e.status === 404 || (e.body || '').toLowerCase().includes('not found')) {
+      toast('error', 'Person not found on SEC EDGAR',
+            'Try their full legal name (e.g. "COOK TIMOTHY D") or enter their CIK directly.');
+    } else {
+      toast('error', err.title, err.body);
+    }
+  }
+}
+
+// ── LLM Chat ───────────────────────────────────────────────────────────────
+async function askInsider(question) {
+  $('chat-inp').value = question;
+  await sendInsiderChat();
+}
+
+async function sendInsiderChat() {
+  const q = $('chat-inp').value.trim();
+  if (!q) return;
+  if (!currentProfile) {
+    toast('warn', 'Load a profile first', 'Search for an insider and click their name.');
+    return;
+  }
+  if (!apiOnline) {
+    toast('error', ERR.API_OFFLINE.title, ERR.API_OFFLINE.fix);
+    return;
+  }
+
+  $('chat-inp').value = '';
+  const msgs = $('chat-msgs');
+  msgs.innerHTML += `<div class="chat-user">You: ${q}</div>`;
+  const aiId = `ai-${Date.now()}`;
+  msgs.innerHTML += `<div class="chat-ai" id="${aiId}"><span class="spinner"></span>Thinking…</div>`;
+  msgs.scrollTop = msgs.scrollHeight;
+
+  try {
+    const rows = (currentProfile.trades || []).slice(0, 150);
+    const d    = await apiCall(`${API}/insider/chat`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        question: q, rows,
+        context: `${currentProfile.insider?.name_clean || 'Insider'} Form 4 history`,
+      }),
+    });
+    $(aiId).innerHTML =
+      `${d.answer || 'No response.'}<div class="chat-meta">Based on ${d.rows_used||0} rows</div>`;
+  } catch(e) {
+    const err = e.classified || ERR.LLM_OFFLINE;
+    $(aiId).innerHTML =
+      `<span style="color:var(--red)">⚠ ${err.title}</span>
+       <div class="chat-meta">${err.body} — ${err.fix}</div>`;
+    toast('error', err.title, err.body);
+  }
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+// ── Formatters ─────────────────────────────────────────────────────────────
+const fmtUSD = n => n == null ? '—' : new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:0}).format(n);
+const fmtN   = n => n == null ? '—' : new Intl.NumberFormat('en-US',{maximumFractionDigits:0}).format(n);
+
+// ── Discord integration ────────────────────────────────────────────────────
+function dcMsg(text, color = 'var(--muted)') {
+  const el = $('dc-msg');
+  el.style.color = color;
+  el.textContent = text;
+}
+
+function dcSetDot(state) {
+  const dot = $('dc-dot');
+  dot.className = `api-dot ${state}`;
+  dot.title = state === 'online'  ? 'Discord connected'
+            : state === 'offline' ? 'Discord not configured'
+            : 'Checking Discord…';
+}
+
+async function dcRefresh() {
+  if (!apiOnline) return;
+  try {
+    const s = await apiCall(`${API}/discord/status`);
+    if (s.configured) {
+      dcSetDot('online');
+      $('dc-connected').style.display = '';
+      $('dc-setup').style.display = 'none';
+    } else {
+      dcSetDot('offline');
+      $('dc-connected').style.display = 'none';
+      $('dc-setup').style.display = '';
+    }
+  } catch(_) {
+    dcSetDot('offline');
+  }
+}
+
+async function dcSave() {
+  const url   = $('dc-webhook-inp').value.trim();
+  const token = $('dc-token-inp').value.trim();
+  if (!url) { dcMsg('Paste a webhook URL first.', 'var(--yellow)'); return; }
+  dcMsg('Saving…');
+  try {
+    await apiCall(`${API}/discord/settings`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ webhook_url: url, bot_token: token || undefined }),
+    });
+    dcMsg('Testing webhook…');
+    await apiCall(`${API}/discord/test`, { method: 'POST' });
+    dcMsg('');
+    toast('success', 'Discord connected!', 'Check your channel — a test message was sent.', 5000);
+    $('dc-webhook-inp').value = '';
+    $('dc-token-inp').value   = '';
+    await dcRefresh();
+  } catch(e) {
+    dcMsg('Failed: ' + (e.classified?.body || 'Check the webhook URL'), 'var(--red)');
+    toast('error', 'Discord connection failed', e.classified?.body || '');
+  }
+}
+
+async function dcTest() {
+  dcMsg('Sending test…');
+  try {
+    await apiCall(`${API}/discord/test`, { method: 'POST' });
+    dcMsg('Test sent ✓', 'var(--green)');
+    toast('success', 'Test message sent', 'Check your Discord channel.', 4000);
+    setTimeout(() => dcMsg(''), 4000);
+  } catch(e) {
+    dcMsg('Test failed', 'var(--red)');
+    toast('error', 'Discord test failed', e.classified?.body || '');
+  }
+}
+
+async function dcScanNow() {
+  dcMsg('Scanning watchlist…');
+  try {
+    await apiCall(`${API}/discord/alert/watchlist`, { method: 'POST' });
+    dcMsg('Scan complete ✓', 'var(--green)');
+    toast('info', 'Watchlist scan triggered', 'New trades (if any) were sent to Discord.', 4000);
+    setTimeout(() => dcMsg(''), 4000);
+  } catch(e) {
+    dcMsg('Scan failed', 'var(--red)');
+  }
+}
+
+async function dcDisconnect() {
+  if (!confirm('Disconnect Discord? Alerts will stop.')) return;
+  try {
+    await apiCall(`${API}/discord/settings`, { method: 'DELETE' });
+    toast('info', 'Discord disconnected', '', 3000);
+    await dcRefresh();
+  } catch(e) {
+    toast('error', 'Could not disconnect', e.classified?.body || '');
+  }
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+// 1. Check API health immediately, then every 30s
+checkApiHealth(true);
+healthTimer = setInterval(() => checkApiHealth(true), 30_000);
+
+// Support ?cik= URL param
+const params = new URLSearchParams(window.location.search);
+if (params.get('cik')) loadProfile(params.get('cik'));
+</script>
+</body>
+</html>

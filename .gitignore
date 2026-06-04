@@ -1,0 +1,23 @@
+# Secrets & credentials
+.env
+connections.json
+
+# Trained models (large binary files)
+models/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/

@@ -1,0 +1,54 @@
+# ── Core agent framework ──────────────────────────────────────────────────────
+langgraph>=0.2.0
+langchain>=0.2.0
+langchain-community>=0.2.0
+
+# ── Local LLM routing (Ollama) ────────────────────────────────────────────────
+langchain-ollama>=0.1.0
+ollama>=0.2.0
+
+# ── FastAPI & real-time transport ─────────────────────────────────────────────
+fastapi>=0.111.0
+uvicorn[standard]>=0.30.0
+websockets>=12.0
+sse-starlette>=2.1.0
+
+# ── Market data & brokerage ───────────────────────────────────────────────────
+alpaca-py>=0.26.0
+yfinance>=0.2.40
+newsapi-python>=0.2.7
+
+# ── Quant / analysis ──────────────────────────────────────────────────────────
+pandas>=2.2.0
+numpy>=1.26.0
+pandas-ta>=0.3.14b   # TA-Lib pure-Python alternative (no C build needed)
+scipy>=1.13.0
+
+# ── Database (TimescaleDB / PostgreSQL) ───────────────────────────────────────
+psycopg2-binary>=2.9.9
+asyncpg>=0.29.0
+sqlalchemy>=2.0.30
+alembic>=1.13.0
+
+# ── ML / Training pipeline ────────────────────────────────────────────────────
+xgboost>=2.0.0
+scikit-learn>=1.5.0
+joblib>=1.4.0
+vaderSentiment>=3.3.2
+
+# ── Data enrichment ───────────────────────────────────────────────────────────
+praw>=7.7.0                    # Reddit API
+google-cloud-bigquery>=3.20.0  # GDELT via BigQuery
+google-auth>=2.29.0
+httpx>=0.27.0
+
+# ── Utilities ─────────────────────────────────────────────────────────────────
+pydantic>=2.7.0
+pydantic-settings>=2.3.0
+python-dotenv>=1.0.1
+httpx>=0.27.0
+structlog>=24.2.0
+
+# ── Discord integration ────────────────────────────────────────────────────────
+# httpx already listed above — used by discord_alerts.py for webhook POSTs
+discord.py>=2.3.0              # optional — only needed to run discord_bot.py (LLM chat bot)

@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Hedge Bot — Data Browser</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg:#0d0f14; --surface:#161a22; --surface2:#1e2330;
+  --border:#2a2f3d; --accent:#3b82f6; --green:#22c55e;
+  --red:#ef4444; --yellow:#f59e0b; --purple:#a78bfa;
+  --text:#e2e8f0; --muted:#64748b;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono','Fira Code',monospace;font-size:13px;min-height:100vh;display:flex;flex-direction:column;}
+
+/* ── Header ── */
+header{display:flex;align-items:center;justify-content:space-between;padding:13px 24px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;}
+header h1{font-size:15px;letter-spacing:2px;color:var(--accent);}
+.back-btn{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 14px;border-radius:6px;cursor:pointer;font-family:inherit;font-size:12px;text-decoration:none;}
+.back-btn:hover{border-color:var(--accent);color:var(--accent);}
+
+/* ── Three-row layout ── */
+.layout{display:flex;flex-direction:column;flex:1;overflow:hidden;}
+
+/* ── Filter bar ── */
+.filter-bar{display:flex;align-items:center;gap:10px;padding:12px 24px;background:var(--surface);border-bottom:1px solid var(--border);flex-wrap:wrap;flex-shrink:0;}
+.filter-bar label{font-size:9px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;display:block;margin-bottom:3px;}
+.filter-group{display:flex;flex-direction:column;}
+.filter-bar select,.filter-bar input{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-family:inherit;font-size:12px;min-width:110px;}
+.filter-bar input[type=date]{min-width:130px;}
+.filter-bar input[type=number]{min-width:80px;}
+.load-btn{background:var(--accent);border:none;color:#fff;padding:8px 20px;border-radius:7px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:700;margin-top:12px;align-self:flex-end;}
+.load-btn:hover{opacity:.85;}
+.row-count{font-size:11px;color:var(--muted);align-self:flex-end;padding-bottom:10px;}
+
+/* ── Source tabs ── */
+.source-tabs{display:flex;gap:4px;padding:12px 24px 0;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0;}
+.stab{padding:7px 18px;border:1px solid transparent;border-bottom:none;border-radius:6px 6px 0 0;cursor:pointer;font-family:inherit;font-size:11px;font-weight:700;letter-spacing:.5px;color:var(--muted);transition:all .15s;}
+.stab.active{border-color:var(--border);color:var(--accent);background:var(--bg);}
+.stab:hover:not(.active){color:var(--text);}
+
+/* ── Main content ── */
+.content-area{display:flex;flex:1;overflow:hidden;}
+
+/* ── Data panel ── */
+.data-panel{flex:1;display:flex;flex-direction:column;overflow:hidden;border-right:1px solid var(--border);}
+
+/* Coverage bar */
+.coverage-bar{display:flex;gap:16px;padding:10px 20px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap;}
+.cov-item{display:flex;flex-direction:column;gap:2px;}
+.cov-item label{font-size:9px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;}
+.cov-item span{font-size:12px;font-weight:700;}
+.cov-item span.ok{color:var(--green);}
+.cov-item span.warn{color:var(--yellow);}
+.cov-item span.empty{color:var(--muted);}
+
+/* Table */
+.table-wrap{flex:1;overflow:auto;}
+table{width:100%;border-collapse:collapse;font-size:11px;}
+thead{position:sticky;top:0;z-index:2;}
+th{background:var(--surface);padding:8px 10px;text-align:left;font-size:9px;letter-spacing:1px;color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap;cursor:pointer;user-select:none;}
+th:hover{color:var(--text);}
+th .sort-arrow{margin-left:4px;opacity:.4;}
+th.sorted .sort-arrow{opacity:1;color:var(--accent);}
+td{padding:7px 10px;border-bottom:1px solid #1a1f2e;vertical-align:top;}
+tr:hover td{background:#1a1f2e;}
+.pos{color:var(--green);}
+.neg{color:var(--red);}
+.neu{color:var(--yellow);}
+.pill{display:inline-block;padding:1px 8px;border-radius:20px;font-size:9px;font-weight:700;}
+.pill-green{background:#14532d;color:var(--green);}
+.pill-red{background:#450a0a;color:var(--red);}
+.pill-blue{background:#1e3a5f;color:var(--accent);}
+.pill-grey{background:var(--surface2);color:var(--muted);}
+.ext-link{color:var(--accent);text-decoration:none;font-size:10px;}
+.ext-link:hover{text-decoration:underline;}
+.empty-state{text-align:center;padding:60px;color:var(--muted);}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;margin-right:6px;vertical-align:middle;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* ── Chat panel ── */
+.chat-panel{width:380px;display:flex;flex-direction:column;background:var(--surface);flex-shrink:0;}
+.chat-header{padding:12px 16px;border-bottom:1px solid var(--border);font-size:10px;letter-spacing:2px;color:var(--muted);display:flex;align-items:center;justify-content:space-between;}
+.chat-model{font-size:10px;color:var(--purple);}
+.chat-messages{flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:12px;}
+.msg{border-radius:8px;padding:10px 14px;font-size:12px;line-height:1.7;max-width:100%;}
+.msg-user{background:#1e2d47;color:var(--text);align-self:flex-end;border-bottom-right-radius:2px;}
+.msg-ai{background:var(--surface2);border:1px solid var(--border);color:var(--text);align-self:flex-start;border-bottom-left-radius:2px;}
+.msg-ai.streaming::after{content:'▌';animation:blink .8s infinite;color:var(--accent);}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+.msg-hint{color:var(--muted);font-size:10px;text-align:center;padding:8px;}
+.chat-meta{font-size:9px;color:var(--muted);margin-top:6px;}
+.suggested-qs{display:flex;flex-direction:column;gap:6px;padding:0 16px 10px;}
+.sq-btn{background:var(--surface2);border:1px solid var(--border);color:var(--muted);padding:7px 12px;border-radius:6px;cursor:pointer;font-family:inherit;font-size:11px;text-align:left;transition:all .15s;}
+.sq-btn:hover{border-color:var(--accent);color:var(--accent);}
+.chat-input-row{display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--border);flex-shrink:0;}
+.chat-input-row textarea{flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:7px;font-family:inherit;font-size:12px;resize:none;height:60px;line-height:1.5;}
+.chat-input-row textarea:focus{outline:none;border-color:var(--accent);}
+.send-btn{background:var(--accent);border:none;color:#fff;padding:8px 14px;border-radius:7px;cursor:pointer;font-size:16px;align-self:flex-end;}
+.send-btn:hover{opacity:.85;}
+.send-btn:disabled{opacity:.4;cursor:not-allowed;}
+.context-notice{font-size:10px;color:var(--muted);padding:6px 16px;background:var(--surface);border-top:1px solid var(--border);}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🔍 DATA BROWSER</h1>
+  <div style="display:flex;gap:10px;align-items:center;">
+    <a class="back-btn" href="training.html">← Training</a>
+    <a class="back-btn" href="dashboard.html">⬡ Dashboard</a>
+  </div>
+</header>
+
+<div class="layout">
+
+  <!-- Filter bar -->
+  <div class="filter-bar">
+    <div class="filter-group">
+      <label>Symbol</label>
+      <select id="f-symbol" onchange="onSymbolChange()">
+        <option value="">Loading…</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>From</label>
+      <input type="date" id="f-start" value="2020-01-01"/>
+    </div>
+    <div class="filter-group">
+      <label>To</label>
+      <input type="date" id="f-end"/>
+    </div>
+
+    <!-- Earnings-specific filters -->
+    <div class="filter-group" id="fg-beat" style="display:none">
+      <label>Beat/Miss</label>
+      <select id="f-beat">
+        <option value="">All</option>
+        <option value="true">Beat ✓</option>
+        <option value="false">Miss ✗</option>
+      </select>
+    </div>
+    <div class="filter-group" id="fg-surprise" style="display:none">
+      <label>Min Surprise %</label>
+      <input type="number" id="f-min-surprise" placeholder="-100" step="0.1"/>
+    </div>
+
+    <!-- News-specific filters -->
+    <div class="filter-group" id="fg-sentiment-range" style="display:none">
+      <label>Sentiment Range</label>
+      <div style="display:flex;gap:6px;">
+        <input type="number" id="f-min-sent" placeholder="Min −1" step="0.1" min="-1" max="1" style="min-width:70px"/>
+        <input type="number" id="f-max-sent" placeholder="Max +1" step="0.1" min="-1" max="1" style="min-width:70px"/>
+      </div>
+    </div>
+    <div class="filter-group" id="fg-min-articles" style="display:none">
+      <label>Min Articles</label>
+      <input type="number" id="f-min-articles" placeholder="0" min="0"/>
+    </div>
+
+    <!-- Reddit-specific filters -->
+    <div class="filter-group" id="fg-subreddit" style="display:none">
+      <label>Subreddit</label>
+      <select id="f-subreddit">
+        <option value="">All</option>
+        <option value="wallstreetbets">r/wallstreetbets</option>
+        <option value="investing">r/investing</option>
+        <option value="stocks">r/stocks</option>
+      </select>
+    </div>
+    <div class="filter-group" id="fg-min-mentions" style="display:none">
+      <label>Min Mentions</label>
+      <input type="number" id="f-min-mentions" placeholder="0" min="0"/>
+    </div>
+
+    <!-- Filing-specific filters -->
+    <div class="filter-group" id="fg-form-type" style="display:none">
+      <label>Form Type</label>
+      <select id="f-form-type">
+        <option value="">All</option>
+        <option value="8-K">8-K (Events)</option>
+        <option value="10-Q">10-Q (Quarterly)</option>
+        <option value="10-K">10-K (Annual)</option>
+      </select>
+    </div>
+    <div class="filter-group" id="fg-keyword" style="display:none">
+      <label>Keyword</label>
+      <input type="text" id="f-keyword" placeholder="e.g. acquisition"/>
+    </div>
+
+    <!-- OHLCV-specific filters -->
+    <div class="filter-group" id="fg-timeframe" style="display:none">
+      <label>Timeframe</label>
+      <select id="f-timeframe">
+        <option value="daily">Daily</option>
+        <option value="hourly">Hourly</option>
+      </select>
+    </div>
+
+    <button class="load-btn" onclick="loadData()">⟳ LOAD DATA</button>
+    <span class="row-count" id="row-count"></span>
+  </div>
+
+  <!-- Source tabs -->
+  <div class="source-tabs">
+    <div class="stab active" onclick="switchSource('earnings',this)">📊 Earnings</div>
+    <div class="stab" onclick="switchSource('news',this)">📰 News Sentiment</div>
+    <div class="stab" onclick="switchSource('reddit',this)">🤖 Reddit</div>
+    <div class="stab" onclick="switchSource('filings',this)">📁 SEC Filings</div>
+    <div class="stab" onclick="switchSource('ohlcv',this)">🕯 OHLCV</div>
+    <div class="stab" onclick="window.open('insider_profile.html','_blank')">👤 Insiders ↗</div>
+  </div>
+
+  <!-- Content area -->
+  <div class="content-area">
+
+    <!-- Data panel -->
+    <div class="data-panel">
+
+      <!-- Coverage summary bar -->
+      <div class="coverage-bar" id="coverage-bar" style="display:none">
+        <div class="cov-item"><label>OHLCV Daily</label><span id="cov-ohlcv" class="empty">—</span></div>
+        <div class="cov-item"><label>News Days</label><span id="cov-news" class="empty">—</span></div>
+        <div class="cov-item"><label>Reddit Days</label><span id="cov-reddit" class="empty">—</span></div>
+        <div class="cov-item"><label>Earnings Qtrs</label><span id="cov-earn" class="empty">—</span></div>
+        <div class="cov-item"><label>SEC Filings</label><span id="cov-filings" class="empty">—</span></div>
+        <div class="cov-item" id="cov-gaps-item" style="display:none">
+          <label>OHLCV Gaps</label><span id="cov-gaps" class="warn">—</span>
+        </div>
+      </div>
+
+      <!-- Table -->
+      <div class="table-wrap">
+        <div class="empty-state" id="empty-state">
+          Select a symbol and click <strong>Load Data</strong> to begin.
+        </div>
+        <table id="data-table" style="display:none">
+          <thead id="table-head"></thead>
+          <tbody id="table-body"></tbody>
+        </table>
+      </div>
+
+    </div>
+
+    <!-- Chat panel -->
+    <div class="chat-panel">
+      <div class="chat-header">
+        <span>🤖 ASK ABOUT THIS DATA</span>
+        <span class="chat-model" id="chat-model-label">Ollama</span>
+      </div>
+
+      <div class="chat-messages" id="chat-messages">
+        <div class="msg-hint">Load data first, then ask questions about what you see.</div>
+      </div>
+
+      <!-- Suggested questions (change with source) -->
+      <div class="suggested-qs" id="suggested-qs"></div>
+
+      <div class="context-notice" id="context-notice">No data loaded</div>
+
+      <div class="chat-input-row">
+        <textarea id="chat-input" placeholder="Ask anything about the visible data…"
+          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat();}"></textarea>
+        <button class="send-btn" id="send-btn" onclick="sendChat()" title="Send (Enter)">➤</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const API = 'http://localhost:8000';
+const $ = id => document.getElementById(id);
+
+let currentSource = 'earnings';
+let currentRows   = [];
+let chatWs        = null;
+let sortState     = { col: null, dir: 'desc' };
+
+// Suggested questions per source
+const SUGGESTED = {
+  earnings: [
+    "Did this company consistently beat EPS estimates?",
+    "What was the biggest earnings surprise and when?",
+    "Are there any quarters with suspiciously large misses?",
+    "How has EPS trended over the years?",
+  ],
+  news: [
+    "Were there periods of unusually negative sentiment?",
+    "Does high article count correlate with major price events?",
+    "What were the most negative news days?",
+    "Is the news sentiment data consistent and reliable?",
+  ],
+  reddit: [
+    "When was this stock most discussed on Reddit?",
+    "Were there any unusual spikes in mention count?",
+    "What subreddit had the most activity?",
+    "Does Reddit sentiment match the news sentiment?",
+  ],
+  filings: [
+    "How many 8-K filings were there in the last year?",
+    "Are there any unusual filing patterns?",
+    "When was the most recent 10-K filed?",
+    "Were there any late filings or gaps?",
+  ],
+  ohlcv: [
+    "Are there any gaps or suspicious data points?",
+    "What was the highest and lowest close price?",
+    "Were there any days with abnormal volume spikes?",
+    "Does the price data look continuous and clean?",
+  ],
+};
+
+// Column definitions per source
+const COLS = {
+  earnings: [
+    {key:'report_date',   label:'DATE',        fmt: d => d?.split('T')[0]},
+    {key:'fiscal_quarter',label:'QUARTER',     fmt: v => v || '—'},
+    {key:'eps_estimate',  label:'EPS EST',     fmt: v => v != null ? `$${v.toFixed(2)}` : '—'},
+    {key:'eps_actual',    label:'EPS ACTUAL',  fmt: v => v != null ? `$${v.toFixed(2)}` : '—'},
+    {key:'eps_surprise',  label:'SURPRISE $',  fmt: v => v != null ? `<span class="${v>=0?'pos':'neg'}">${v>=0?'+':''}$${v.toFixed(2)}</span>` : '—', html:true},
+    {key:'eps_surprise_pct', label:'SURPRISE %', fmt: v => v != null ? `<span class="${v>=0?'pos':'neg'}">${v>=0?'+':''}${v.toFixed(1)}%</span>` : '—', html:true},
+    {key:'beat_estimate', label:'RESULT',      fmt: v => v === true  ? `<span class="pill pill-green">BEAT</span>`
+                                                       : v === false ? `<span class="pill pill-red">MISS</span>`
+                                                       : '—', html:true},
+  ],
+  news: [
+    {key:'date',          label:'DATE',        fmt: d => d?.split('T')[0]},
+    {key:'source',        label:'SOURCE',      fmt: v => `<span class="pill pill-blue">${v||'—'}</span>`, html:true},
+    {key:'sentiment',     label:'SENTIMENT',   fmt: v => v != null ? `<span class="${v>=0.2?'pos':v<=-0.2?'neg':'neu'}">${v>=0?'+':''}${v?.toFixed(3)}</span>` : '—', html:true},
+    {key:'article_count', label:'ARTICLES',    fmt: v => v?.toLocaleString() || '—'},
+    {key:'avg_tone',      label:'AVG TONE',    fmt: v => v != null ? v.toFixed(2) : '—'},
+    {key:'positive_pct',  label:'POS %',       fmt: v => v != null ? `<span class="pos">${(v*100).toFixed(1)}%</span>` : '—', html:true},
+    {key:'negative_pct',  label:'NEG %',       fmt: v => v != null ? `<span class="neg">${(v*100).toFixed(1)}%</span>` : '—', html:true},
+  ],
+  reddit: [
+    {key:'date',          label:'DATE',        fmt: d => d?.split('T')[0]},
+    {key:'subreddit',     label:'SUBREDDIT',   fmt: v => v ? `r/${v}` : '—'},
+    {key:'mention_count', label:'MENTIONS',    fmt: v => v?.toLocaleString() || '0'},
+    {key:'avg_score',     label:'AVG SCORE',   fmt: v => v != null ? v.toFixed(1) : '—'},
+    {key:'avg_sentiment', label:'SENTIMENT',   fmt: v => v != null ? `<span class="${v>=0.2?'pos':v<=-0.2?'neg':'neu'}">${v>=0?'+':''}${v?.toFixed(3)}</span>` : '—', html:true},
+    {key:'top_post_title',label:'TOP POST',    fmt: v => v ? `<span title="${v.replace(/"/g,'&quot;')}" style="color:var(--muted);font-size:10px;max-width:180px;display:inline-block;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;vertical-align:bottom">${v}</span>` : '—', html:true},
+    {key:'top_post_score',label:'POST SCORE',  fmt: v => v?.toLocaleString() || '—'},
+  ],
+  filings: [
+    {key:'filed_date',   label:'FILED DATE',   fmt: d => d?.split('T')[0]},
+    {key:'form_type',    label:'FORM',         fmt: v => {
+      const cls = v==='8-K'?'pill-blue':v==='10-K'?'pill-green':'pill-grey';
+      return `<span class="pill ${cls}">${v||'—'}</span>`;
+    }, html:true},
+    {key:'description',  label:'DOCUMENT',     fmt: v => v || '—'},
+    {key:'period_of_report', label:'PERIOD',   fmt: d => d?.split('T')[0] || '—'},
+    {key:'filing_url',   label:'LINK',         fmt: v => v ? `<a class="ext-link" href="${v}" target="_blank">Open ↗</a>` : '—', html:true},
+  ],
+  ohlcv: [
+    {key:'ts',    label:'DATE',   fmt: d => d?.split('T')[0] || d},
+    {key:'open',  label:'OPEN',   fmt: v => v != null ? `$${v.toFixed(2)}` : '—'},
+    {key:'high',  label:'HIGH',   fmt: v => v != null ? `<span class="pos">$${v.toFixed(2)}</span>` : '—', html:true},
+    {key:'low',   label:'LOW',    fmt: v => v != null ? `<span class="neg">$${v.toFixed(2)}</span>` : '—', html:true},
+    {key:'close', label:'CLOSE',  fmt: v => v != null ? `$${v.toFixed(2)}` : '—'},
+    {key:'volume',label:'VOLUME', fmt: v => v != null ? (v/1e6).toFixed(2)+'M' : '—'},
+    {key:'_chg',  label:'CHG %',  fmt: (v,row,rows,i) => {
+      if (i >= rows.length-1) return '—';
+      const prev = rows[i+1]?.close;
+      if (!prev) return '—';
+      const pct = ((row.close - prev) / prev * 100);
+      return `<span class="${pct>=0?'pos':'neg'}">${pct>=0?'+':''}${pct.toFixed(2)}%</span>`;
+    }, html:true, virtual:true},
+  ],
+};
+
+// ── Init ───────────────────────────────────────────────────────────────────
+async function init() {
+  // Set default end date to today
+  $('f-end').value = new Date().toISOString().split('T')[0];
+
+  // Load tickers
+  try {
+    const r = await fetch(`${API}/data/tickers`);
+    const tickers = await r.json();
+    $('f-symbol').innerHTML = '<option value="">Select…</option>' +
+      tickers.map(t => `<option value="${t}">${t}</option>`).join('');
+  } catch(e) {
+    $('f-symbol').innerHTML = '<option value="">API offline</option>';
+  }
+
+  connectChatWs();
+  renderSuggestedQs();
+  showFiltersForSource('earnings');
+}
+
+// ── Source switching ───────────────────────────────────────────────────────
+function switchSource(src, btn) {
+  currentSource = src;
+  document.querySelectorAll('.stab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  showFiltersForSource(src);
+  renderSuggestedQs();
+  if ($('f-symbol').value) loadData();
+}
+
+function showFiltersForSource(src) {
+  const groups = {
+    'fg-beat':          ['earnings'],
+    'fg-surprise':      ['earnings'],
+    'fg-sentiment-range':['news'],
+    'fg-min-articles':  ['news'],
+    'fg-subreddit':     ['reddit'],
+    'fg-min-mentions':  ['reddit'],
+    'fg-form-type':     ['filings'],
+    'fg-keyword':       ['filings'],
+    'fg-timeframe':     ['ohlcv'],
+  };
+  for (const [id, sources] of Object.entries(groups)) {
+    $(id).style.display = sources.includes(src) ? 'flex' : 'none';
+  }
+}
+
+// ── Symbol change → load coverage ────────────────────────────────────────
+async function onSymbolChange() {
+  const sym = $('f-symbol').value;
+  if (!sym) return;
+  try {
+    const r = await fetch(`${API}/data/summary/${sym}`);
+    const s = await r.json();
+    renderCoverage(s);
+  } catch(e) {}
+  loadData();
+}
+
+function renderCoverage(s) {
+  $('coverage-bar').style.display = 'flex';
+  function fmt(c) {
+    if (!c || !c.count) return { text: 'No data', cls: 'empty' };
+    return { text: `${c.count.toLocaleString()} rows`, cls: c.count > 100 ? 'ok' : 'warn' };
+  }
+  const fields = [
+    ['cov-ohlcv', s.ohlcv], ['cov-news', s.news],
+    ['cov-reddit', s.reddit], ['cov-earn', s.earnings], ['cov-filings', s.filings],
+  ];
+  fields.forEach(([id, cov]) => {
+    const f = fmt(cov);
+    const el = $(id);
+    el.textContent = f.text;
+    el.className   = f.cls;
+  });
+  if (s.ohlcv_gaps?.length > 0) {
+    $('cov-gaps-item').style.display = 'flex';
+    $('cov-gaps').textContent = `${s.ohlcv_gaps.length} gap(s)`;
+  }
+}
+
+// ── Load data ──────────────────────────────────────────────────────────────
+async function loadData() {
+  const sym = $('f-symbol').value;
+  if (!sym) { alert('Select a symbol'); return; }
+
+  const start = $('f-start').value;
+  const end   = $('f-end').value;
+  let url, params;
+
+  const base = (path, extra={}) => {
+    const p = new URLSearchParams({ symbol:sym, start, end, limit:500, ...extra });
+    return `${API}/data/${path}?${p}`;
+  };
+
+  $('empty-state').innerHTML = '<span class="spinner"></span> Loading…';
+  $('empty-state').style.display = 'block';
+  $('data-table').style.display  = 'none';
+
+  try {
+    let endpoint;
+    switch (currentSource) {
+      case 'earnings':
+        endpoint = base('earnings', {
+          ...$('f-beat').value    ? {beat: $('f-beat').value}    : {},
+          ...$('f-min-surprise').value ? {min_surprise_pct: $('f-min-surprise').value} : {},
+        }); break;
+      case 'news':
+        endpoint = base('news', {
+          ...($('f-min-sent').value  ? {min_sentiment: $('f-min-sent').value}   : {}),
+          ...($('f-max-sent').value  ? {max_sentiment: $('f-max-sent').value}   : {}),
+          ...($('f-min-articles').value ? {min_articles: $('f-min-articles').value} : {}),
+        }); break;
+      case 'reddit':
+        endpoint = base('reddit', {
+          ...($('f-subreddit').value    ? {subreddit:    $('f-subreddit').value}    : {}),
+          ...($('f-min-mentions').value ? {min_mentions: $('f-min-mentions').value} : {}),
+        }); break;
+      case 'filings':
+        endpoint = base('filings', {
+          ...($('f-form-type').value ? {form_type: $('f-form-type').value} : {}),
+          ...($('f-keyword').value   ? {keyword:   $('f-keyword').value}   : {}),
+        }); break;
+      case 'ohlcv':
+        endpoint = base('ohlcv', { timeframe: $('f-timeframe').value }); break;
+    }
+
+    const r    = await fetch(endpoint);
+    const data = await r.json();
+    currentRows = data.rows || [];
+    renderTable(currentRows);
+    $('row-count').textContent = `${currentRows.length} rows`;
+    $('context-notice').textContent =
+      `${currentRows.length} rows loaded · Ask anything below`;
+
+  } catch(e) {
+    $('empty-state').innerHTML = `<span style="color:var(--red)">Error: ${e.message}</span>`;
+  }
+}
+
+// ── Render table ───────────────────────────────────────────────────────────
+function renderTable(rows) {
+  const cols = COLS[currentSource];
+  $('empty-state').style.display = rows.length ? 'none' : 'block';
+  $('data-table').style.display  = rows.length ? 'table' : 'none';
+  if (!rows.length) {
+    $('empty-state').innerHTML = 'No rows match these filters.';
+    return;
+  }
+
+  // Header
+  $('table-head').innerHTML = `<tr>${cols.map((c,i) =>
+    `<th onclick="sortBy(${i})" class="${sortState.col===i?'sorted':''}">
+      ${c.label}<span class="sort-arrow">${sortState.col===i?(sortState.dir==='asc'?'▲':'▼'):'⇅'}</span>
+    </th>`
+  ).join('')}</tr>`;
+
+  // Body
+  $('table-body').innerHTML = rows.map((row, ri) =>
+    `<tr>${cols.map(c => {
+      const val = c.virtual ? null : row[c.key];
+      const rendered = c.fmt(val, row, rows, ri);
+      return `<td>${c.html ? rendered : escHtml(String(rendered ?? '—'))}</td>`;
+    }).join('')}</tr>`
+  ).join('');
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function sortBy(colIdx) {
+  const col = COLS[currentSource][colIdx];
+  if (col.virtual) return;
+  const dir = sortState.col === colIdx && sortState.dir === 'desc' ? 'asc' : 'desc';
+  sortState  = { col: colIdx, dir };
+  currentRows = [...currentRows].sort((a, b) => {
+    const av = a[col.key], bv = b[col.key];
+    if (av == null) return 1; if (bv == null) return -1;
+    return dir === 'asc' ? (av > bv ? 1 : -1) : (av < bv ? 1 : -1);
+  });
+  renderTable(currentRows);
+}
+
+// ── Suggested questions ────────────────────────────────────────────────────
+function renderSuggestedQs() {
+  const qs = SUGGESTED[currentSource] || [];
+  $('suggested-qs').innerHTML = qs.map(q =>
+    `<button class="sq-btn" onclick="askQuestion(\`${q}\`)">${q}</button>`
+  ).join('');
+}
+
+function askQuestion(q) {
+  $('chat-input').value = q;
+  sendChat();
+}
+
+// ── WebSocket chat ─────────────────────────────────────────────────────────
+function connectChatWs() {
+  if (chatWs && chatWs.readyState === WebSocket.OPEN) return;
+  chatWs = new WebSocket(`ws://localhost:8000/data/ws/data-chat`);
+  chatWs.onmessage = ({ data }) => {
+    const e = JSON.parse(data);
+    if (e.type === 'start') {
+      addAiMessage('', true);
+    } else if (e.type === 'token') {
+      appendToLastAiMessage(e.text);
+    } else if (e.type === 'done') {
+      finaliseAiMessage(e.rows_used);
+      $('send-btn').disabled = false;
+    } else if (e.type === 'error') {
+      addAiMessage(`⚠ ${e.text}`);
+      $('send-btn').disabled = false;
+    }
+  };
+  chatWs.onclose = () => setTimeout(connectChatWs, 2000);
+}
+
+async function sendChat() {
+  const q = $('chat-input').value.trim();
+  if (!q) return;
+  if (!currentRows.length) {
+    addAiMessage('No data loaded yet — load some data first, then ask a question.');
+    return;
+  }
+
+  $('chat-input').value = '';
+  $('send-btn').disabled = true;
+  addUserMessage(q);
+
+  // Remove hint if present
+  const hint = $('chat-messages').querySelector('.msg-hint');
+  if (hint) hint.remove();
+
+  if (!chatWs || chatWs.readyState !== WebSocket.OPEN) {
+    connectChatWs();
+    // fallback to REST if WS not ready
+    try {
+      const r = await fetch(`${API}/data/chat`, {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+          question: q,
+          rows:     currentRows.slice(0, 150),
+          source:   currentSource,
+          symbol:   $('f-symbol').value,
+        }),
+      });
+      const d = await r.json();
+      addAiMessage(d.answer, false, d.rows_used);
+      $('send-btn').disabled = false;
+    } catch(e) {
+      addAiMessage(`Error: ${e.message}`);
+      $('send-btn').disabled = false;
+    }
+    return;
+  }
+
+  chatWs.send(JSON.stringify({
+    question: q,
+    rows:     currentRows.slice(0, 150),
+    source:   currentSource,
+    symbol:   $('f-symbol').value,
+  }));
+}
+
+// ── Chat message helpers ───────────────────────────────────────────────────
+function addUserMessage(text) {
+  const el = document.createElement('div');
+  el.className = 'msg msg-user';
+  el.textContent = text;
+  $('chat-messages').appendChild(el);
+  scrollChat();
+}
+
+function addAiMessage(text, streaming=false, rowsUsed=null) {
+  const el = document.createElement('div');
+  el.className = `msg msg-ai${streaming ? ' streaming' : ''}`;
+  el.id = 'streaming-msg';
+  el.innerHTML = formatAiText(text);
+  if (rowsUsed) {
+    const meta = document.createElement('div');
+    meta.className = 'chat-meta';
+    meta.textContent = `Based on ${rowsUsed} rows`;
+    el.appendChild(meta);
+  }
+  $('chat-messages').appendChild(el);
+  scrollChat();
+}
+
+function appendToLastAiMessage(token) {
+  const el = $('streaming-msg');
+  if (!el) return;
+  // Store raw text on element for final formatting
+  el._raw = (el._raw || '') + token;
+  el.innerHTML = formatAiText(el._raw);
+  scrollChat();
+}
+
+function finaliseAiMessage(rowsUsed) {
+  const el = $('streaming-msg');
+  if (!el) return;
+  el.classList.remove('streaming');
+  el.removeAttribute('id');
+  if (rowsUsed) {
+    const meta = document.createElement('div');
+    meta.className = 'chat-meta';
+    meta.textContent = `Based on ${rowsUsed} rows`;
+    el.appendChild(meta);
+  }
+}
+
+function formatAiText(text) {
+  // Basic markdown: bold, line breaks
+  return text
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\n/g, '<br/>');
+}
+
+function scrollChat() {
+  const el = $('chat-messages');
+  el.scrollTop = el.scrollHeight;
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>

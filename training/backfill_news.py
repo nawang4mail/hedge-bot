@@ -1,0 +1,153 @@
+"""
+GDELT News Sentiment Backfill via Google BigQuery.
+"""
+from __future__ import annotations
+import argparse
+import asyncio
+import json
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+from db.connection import AsyncSessionLocal, init_db
+from db.training_models import NewsSentiment
+from training.progress import ProgressEmitter
+
+_CONN_FILE = Path(__file__).parent.parent / "connections.json"
+
+
+def _get_bq_client():
+    creds_data = json.loads(_CONN_FILE.read_text()) if _CONN_FILE.exists() else {}
+    bq = creds_data.get("bigquery", {})
+    project  = bq.get("project_id", "")
+    cred_path = bq.get("credentials_json", "")
+    from google.cloud import bigquery
+    if cred_path and Path(cred_path).exists():
+        from google.oauth2 import service_account
+        sa = service_account.Credentials.from_service_account_file(cred_path)
+        return bigquery.Client(project=project, credentials=sa)
+    return bigquery.Client(project=project)
+
+
+def fetch_gdelt_sentiment(symbol: str, start: str, end: str,
+                           on_progress: callable | None = None) -> list[dict]:
+    client = _get_bq_client()
+    query  = f"""
+    WITH articles AS (
+      SELECT
+        DATE(DATE) as article_date,
+        CAST(V2Tone_1 AS FLOAT64) as tone,
+        CASE WHEN CAST(V2Tone_1 AS FLOAT64) > 0 THEN 1 ELSE 0 END as is_positive,
+        CASE WHEN CAST(V2Tone_1 AS FLOAT64) < 0 THEN 1 ELSE 0 END as is_negative
+      FROM `gdelt-bq.gdeltv2.gkg`
+      WHERE DATE >= '{start}' AND DATE <= '{end}'
+        AND (
+          LOWER(SourceCommonName) LIKE '%finance%'
+          OR LOWER(SourceCommonName) LIKE '%reuters%'
+          OR LOWER(SourceCommonName) LIKE '%bloomberg%'
+          OR LOWER(SourceCommonName) LIKE '%cnbc%'
+          OR LOWER(SourceCommonName) LIKE '%marketwatch%'
+        )
+        AND (
+          LOWER(Persons)       LIKE LOWER('%{symbol}%')
+          OR LOWER(Organizations) LIKE LOWER('%{symbol}%')
+        )
+    )
+    SELECT
+      article_date,
+      COUNT(*)                          as article_count,
+      AVG(tone)                         as avg_tone,
+      SUM(is_positive) / COUNT(*)       as positive_pct,
+      SUM(is_negative) / COUNT(*)       as negative_pct
+    FROM articles
+    GROUP BY article_date
+    ORDER BY article_date
+    """
+    raw_rows = list(client.query(query).result())
+    total    = len(raw_rows)
+    rows     = []
+    for i, row in enumerate(raw_rows):
+        avg_tone  = float(row.avg_tone or 0)
+        sentiment = max(-1.0, min(1.0, avg_tone / 10.0))
+        rows.append({
+            "symbol":        symbol.upper(),
+            "date":          datetime.combine(row.article_date,
+                                               datetime.min.time()).replace(tzinfo=timezone.utc),
+            "source":        "gdelt",
+            "sentiment":     round(sentiment, 4),
+            "article_count": int(row.article_count),
+            "avg_tone":      round(avg_tone, 4),
+            "positive_pct":  round(float(row.positive_pct or 0), 4),
+            "negative_pct":  round(float(row.negative_pct or 0), 4),
+            "top_themes":    None,
+        })
+        if on_progress and (i % 10 == 0 or i == total - 1):
+            on_progress(i + 1, total)
+    return rows
+
+
+async def upsert_sentiment(rows: list[dict]) -> int:
+    if not rows:
+        return 0
+    async with AsyncSessionLocal() as db:
+        stmt   = pg_insert(NewsSentiment).values(rows).on_conflict_do_nothing(
+            constraint="uq_news_symbol_date_source")
+        result = await db.execute(stmt)
+        await db.commit()
+        return result.rowcount
+
+
+async def backfill(symbols: list[str], years: int = 3,
+                   emitter: ProgressEmitter | None = None):
+    await init_db()
+    end   = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    start = (datetime.now(timezone.utc) - timedelta(days=365 * years)).strftime("%Y-%m-%d")
+    total_days = 365 * years
+
+    if emitter:
+        await emitter.phase_start("News Sentiment (GDELT)",
+                                   total_tickers=len(symbols), sources=["gdelt"])
+
+    for symbol in symbols:
+        if emitter:
+            await emitter.ticker_start(symbol, total=total_days,
+                                        unit="days", source="gdelt")
+        try:
+            loop = asyncio.get_event_loop()
+
+            def _on_prog(current, total):
+                asyncio.run_coroutine_threadsafe(
+                    emitter.ticker_progress(symbol, current, total, unit="days",
+                        detail=f"Processing GDELT articles…"),
+                    loop
+                ) if emitter else None
+
+            rows = fetch_gdelt_sentiment(symbol, start, end,
+                                          on_progress=_on_prog if emitter else None)
+            n    = await upsert_sentiment(rows)
+            if emitter:
+                await emitter.ticker_done(symbol, rows_inserted=n,
+                                           rows_total=len(rows), source="gdelt")
+                await emitter.emit("row_insert", symbol=symbol,
+                                   table="news_sentiment", count=n, cumulative=n)
+            else:
+                print(f"  {symbol}: {len(rows)} days, {n} new rows")
+        except Exception as e:
+            if emitter:
+                await emitter.ticker_error(symbol, str(e), source="gdelt")
+            else:
+                print(f"  FAILED {symbol}: {e}")
+
+    if emitter:
+        await emitter.phase_done("News Sentiment (GDELT)")
+    else:
+        print("✅ News backfill complete")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--symbols", nargs="+", required=True)
+    parser.add_argument("--years",   type=int, default=3)
+    args = parser.parse_args()
+    asyncio.run(backfill(args.symbols, args.years))

@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Hedge Bot — Connections</title>
+<style>
+  :root {
+    --bg:      #0d0f14;
+    --surface: #161a22;
+    --surface2:#1e2330;
+    --border:  #2a2f3d;
+    --accent:  #3b82f6;
+    --green:   #22c55e;
+    --red:     #ef4444;
+    --yellow:  #f59e0b;
+    --text:    #e2e8f0;
+    --muted:   #64748b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 13px; min-height: 100vh; }
+
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 28px; background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+  header h1 { font-size: 15px; letter-spacing: 2px; color: var(--accent); }
+  .back-btn {
+    background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+    padding: 6px 16px; border-radius: 6px; cursor: pointer; font-family: inherit;
+    font-size: 12px; text-decoration: none;
+  }
+  .back-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  .page { max-width: 860px; margin: 0 auto; padding: 28px; }
+
+  .intro {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px 20px; margin-bottom: 24px;
+    color: var(--muted); line-height: 1.7; font-size: 12px;
+  }
+  .intro strong { color: var(--text); }
+
+  /* ── Service card ── */
+  .service-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 24px; margin-bottom: 20px;
+    transition: border-color .2s;
+  }
+  .service-card.connected { border-color: var(--green); }
+  .service-card.error     { border-color: var(--red); }
+
+  .card-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  .card-title-group { display: flex; align-items: center; gap: 12px; }
+  .service-icon { font-size: 24px; }
+  .service-name { font-size: 15px; font-weight: 700; }
+  .service-desc { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  .status-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700;
+    letter-spacing: 1px;
+  }
+  .status-badge.connected { background: #14532d; color: var(--green); }
+  .status-badge.disconnected { background: var(--surface2); color: var(--muted); }
+  .status-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+
+  /* ── Fields ── */
+  .fields-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+  .field-group label {
+    display: block; font-size: 9px; letter-spacing: 1.5px; color: var(--muted);
+    margin-bottom: 5px; text-transform: uppercase;
+  }
+  .field-wrap { position: relative; }
+  .field-wrap input {
+    width: 100%; background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); padding: 8px 36px 8px 12px; border-radius: 7px;
+    font-family: inherit; font-size: 12px; transition: border-color .15s;
+  }
+  .field-wrap input:focus { outline: none; border-color: var(--accent); }
+  .field-wrap input.filled { border-color: #2a4a3a; }
+  .toggle-secret {
+    position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+    background: none; border: none; cursor: pointer; color: var(--muted);
+    font-size: 14px; padding: 0; line-height: 1;
+  }
+  .toggle-secret:hover { color: var(--text); }
+  .field-hint { font-size: 10px; color: var(--muted); margin-top: 4px; }
+
+  /* ── Actions ── */
+  .card-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .btn {
+    padding: 8px 20px; border-radius: 7px; border: none; cursor: pointer;
+    font-family: inherit; font-size: 12px; font-weight: 700; letter-spacing: .5px;
+    transition: opacity .15s;
+  }
+  .btn:hover { opacity: .85; }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+  .btn-primary   { background: var(--accent); color: #fff; }
+  .btn-outline   { background: transparent; border: 1px solid var(--border); color: var(--text); }
+  .btn-outline:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-danger    { background: transparent; border: 1px solid var(--border); color: var(--muted); }
+  .btn-danger:hover { border-color: var(--red); color: var(--red); }
+  .btn-sm { padding: 5px 14px; font-size: 11px; }
+
+  .test-result {
+    flex: 1; font-size: 11px; padding: 6px 12px; border-radius: 6px;
+    display: none;
+  }
+  .test-result.ok  { background: #14532d; color: var(--green); display: block; }
+  .test-result.err { background: #450a0a; color: var(--red);   display: block; }
+
+  .docs-link { font-size: 11px; color: var(--accent); text-decoration: none; }
+  .docs-link:hover { text-decoration: underline; }
+
+  /* ── Loading ── */
+  #loading { text-align: center; padding: 60px; color: var(--muted); }
+  .spinner { display: inline-block; width: 18px; height: 18px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; margin-right: 8px; vertical-align: middle; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Toast ── */
+  #toast {
+    position: fixed; bottom: 24px; right: 24px; padding: 12px 20px;
+    border-radius: 8px; font-size: 12px; font-weight: 700; z-index: 100;
+    display: none; animation: fadeIn .2s;
+  }
+  #toast.ok  { background: #14532d; color: var(--green); border: 1px solid var(--green); }
+  #toast.err { background: #450a0a; color: var(--red);   border: 1px solid var(--red); }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🔌 CONNECTIONS</h1>
+  <a class="back-btn" href="dashboard.html">← Back to Dashboard</a>
+</header>
+
+<div class="page">
+
+  <div class="intro">
+    <strong>Connect your external services below.</strong> Credentials are stored locally in
+    <code>connections.json</code> in the project folder — never sent to any server other than
+    the service you're connecting to. Secret fields are masked after saving.
+    Click <strong>Test Connection</strong> to verify before running the pipeline.
+  </div>
+
+  <div id="loading"><span class="spinner"></span>Loading services…</div>
+  <div id="cards"></div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+const API = 'http://localhost:8000';
+
+const SERVICE_ICONS = {
+  alpaca:   '📈',
+  bigquery: '☁️',
+  reddit:   '🤖',
+  newsapi:  '📰',
+};
+
+// ── Toast ──────────────────────────────────────────────────────────────────
+function toast(msg, type = 'ok') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = type;
+  el.style.display = 'block';
+  setTimeout(() => { el.style.display = 'none'; }, 3500);
+}
+
+// ── Render ─────────────────────────────────────────────────────────────────
+function renderCards(services) {
+  const container = document.getElementById('cards');
+  container.innerHTML = services.map(svc => {
+    const statusCls  = svc.connected ? 'connected' : 'disconnected';
+    const statusText = svc.connected ? 'CONNECTED' : 'NOT CONNECTED';
+
+    const fieldsHtml = svc.fields.map(f => {
+      const isSecret  = f.secret;
+      const val       = f.value || '';
+      const filled    = f.filled;
+      const inputType = isSecret ? 'password' : 'text';
+      const toggleBtn = isSecret
+        ? `<button class="toggle-secret" type="button" onclick="toggleSecret(this)" title="Show/hide">👁</button>`
+        : '';
+      return `
+        <div class="field-group">
+          <label>${f.label}</label>
+          <div class="field-wrap">
+            <input
+              type="${inputType}"
+              data-key="${f.key}"
+              data-service="${svc.id}"
+              value="${val}"
+              placeholder="${f.placeholder || f.default || ''}"
+              class="${filled ? 'filled' : ''}"
+            />
+            ${toggleBtn}
+          </div>
+          ${f.filled ? '<div class="field-hint">✓ Saved — enter new value to update</div>' : ''}
+        </div>`;
+    }).join('');
+
+    return `
+      <div class="service-card ${svc.connected ? 'connected' : ''}" id="card-${svc.id}">
+        <div class="card-header">
+          <div class="card-title-group">
+            <span class="service-icon">${SERVICE_ICONS[svc.id] || '🔗'}</span>
+            <div>
+              <div class="service-name">${svc.label}</div>
+              <div class="service-desc">${svc.description}</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center">
+            <a class="docs-link" href="${svc.docs_url}" target="_blank">Docs ↗</a>
+            <div class="status-badge ${statusCls}">
+              <span class="status-dot"></span>${statusText}
+            </div>
+          </div>
+        </div>
+
+        <div class="fields-grid">${fieldsHtml}</div>
+
+        <div class="card-actions">
+          <button class="btn btn-primary btn-sm" onclick="saveService('${svc.id}')">💾 Save</button>
+          <button class="btn btn-outline btn-sm" onclick="testService('${svc.id}')">⚡ Test Connection</button>
+          <button class="btn btn-danger btn-sm" onclick="clearService('${svc.id}')">🗑 Clear</button>
+          <span class="test-result" id="test-${svc.id}"></span>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ── Load ───────────────────────────────────────────────────────────────────
+async function loadServices() {
+  try {
+    const r = await fetch(`${API}/connections`);
+    const services = await r.json();
+    document.getElementById('loading').style.display = 'none';
+    renderCards(services);
+  } catch(e) {
+    document.getElementById('loading').innerHTML =
+      `<div style="color:var(--red)">Could not reach API at ${API}.<br/>Make sure the server is running.</div>`;
+  }
+}
+
+// ── Toggle secret visibility ───────────────────────────────────────────────
+function toggleSecret(btn) {
+  const input = btn.previousElementSibling;
+  input.type  = input.type === 'password' ? 'text' : 'password';
+  btn.textContent = input.type === 'password' ? '👁' : '🙈';
+}
+
+// ── Save ───────────────────────────────────────────────────────────────────
+async function saveService(serviceId) {
+  const inputs = document.querySelectorAll(`[data-service="${serviceId}"]`);
+  const credentials = {};
+  inputs.forEach(inp => {
+    if (inp.value && !inp.value.includes('••')) {
+      credentials[inp.dataset.key] = inp.value;
+    }
+  });
+
+  if (!Object.keys(credentials).length) {
+    toast('No new values to save', 'err'); return;
+  }
+
+  const r = await fetch(`${API}/connections/${serviceId}`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ credentials }),
+  });
+
+  if (r.ok) {
+    toast(`✓ ${serviceId} credentials saved`);
+    await loadServices();
+  } else {
+    toast(`Failed to save: ${await r.text()}`, 'err');
+  }
+}
+
+// ── Test ───────────────────────────────────────────────────────────────────
+async function testService(serviceId) {
+  const resultEl = document.getElementById(`test-${serviceId}`);
+  resultEl.className = 'test-result';
+  resultEl.textContent = '⏳ Testing…';
+  resultEl.style.display = 'block';
+
+  const r    = await fetch(`${API}/connections/${serviceId}/test`, { method: 'POST' });
+  const data = await r.json();
+
+  if (data.success) {
+    resultEl.className = 'test-result ok';
+    resultEl.textContent = data.detail;
+    document.getElementById(`card-${serviceId}`).classList.add('connected');
+  } else {
+    resultEl.className = 'test-result err';
+    resultEl.textContent = '✖ ' + data.detail;
+    document.getElementById(`card-${serviceId}`).classList.remove('connected');
+  }
+}
+
+// ── Clear ──────────────────────────────────────────────────────────────────
+async function clearService(serviceId) {
+  if (!confirm(`Clear all saved credentials for ${serviceId}?`)) return;
+  const r = await fetch(`${API}/connections/${serviceId}`, { method: 'DELETE' });
+  if (r.ok) {
+    toast(`Credentials cleared for ${serviceId}`);
+    await loadServices();
+  }
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────
+loadServices();
+</script>
+</body>
+</html>

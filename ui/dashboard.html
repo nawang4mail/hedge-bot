@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Hedge Bot — Command Center</title>
+<style>
+  :root {
+    --bg:       #0d0f14;
+    --surface:  #161a22;
+    --border:   #2a2f3d;
+    --accent:   #3b82f6;
+    --green:    #22c55e;
+    --red:      #ef4444;
+    --yellow:   #f59e0b;
+    --text:     #e2e8f0;
+    --muted:    #64748b;
+    --buy:      #22c55e;
+    --sell:     #ef4444;
+    --hold:     #f59e0b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 13px; }
+
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 24px; border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  header h1 { font-size: 16px; letter-spacing: 2px; color: var(--accent); }
+  #kill-switch {
+    background: var(--red); color: #fff; border: none; padding: 8px 20px;
+    border-radius: 6px; cursor: pointer; font-weight: 700; letter-spacing: 1px;
+    font-size: 12px; transition: opacity .2s;
+  }
+  #kill-switch.halted { background: var(--green); }
+  #kill-switch:hover { opacity: .85; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-rows: auto auto;
+    gap: 16px;
+    padding: 16px 24px;
+  }
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px;
+  }
+  .card-title { font-size: 10px; letter-spacing: 2px; color: var(--muted); margin-bottom: 12px; text-transform: uppercase; }
+
+  /* Portfolio strip */
+  #portfolio-strip { grid-column: 1 / -1; }
+  .port-metrics { display: flex; gap: 32px; flex-wrap: wrap; }
+  .metric label { display: block; font-size: 10px; color: var(--muted); margin-bottom: 4px; }
+  .metric span  { font-size: 22px; font-weight: 700; }
+  .metric span.pos { color: var(--green); }
+  .metric span.neg { color: var(--red); }
+
+  /* Positions table */
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; color: var(--muted); font-size: 10px; letter-spacing: 1px; padding: 4px 6px; border-bottom: 1px solid var(--border); }
+  td { padding: 6px 6px; border-bottom: 1px solid #1e2330; }
+  tr:last-child td { border: none; }
+
+  /* Agent pipeline */
+  #pipeline-card { grid-column: 1 / 3; }
+  .pipeline { display: flex; gap: 0; align-items: stretch; }
+  .agent-box {
+    flex: 1; padding: 12px; border: 1px solid var(--border); border-radius: 8px;
+    position: relative; background: var(--bg);
+  }
+  .agent-box + .agent-box { margin-left: 8px; }
+  .agent-name { font-size: 11px; letter-spacing: 1px; color: var(--muted); margin-bottom: 6px; }
+  .agent-status {
+    font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 20px;
+    display: inline-block; margin-bottom: 8px;
+  }
+  .status-idle       { background: #1e2330; color: var(--muted); }
+  .status-processing { background: #1e3a5f; color: var(--accent); animation: pulse 1s infinite; }
+  .status-completed  { background: #14532d; color: var(--green); }
+  .status-error      { background: #450a0a; color: var(--red); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+  .agent-output { font-size: 10px; color: var(--muted); max-height: 70px; overflow: auto; white-space: pre-wrap; word-break: break-all; }
+
+  /* Log stream */
+  #log-card { grid-column: 3; grid-row: 2; }
+  #log-stream {
+    height: 260px; overflow-y: auto; font-size: 10px; line-height: 1.6;
+    color: var(--muted); background: var(--bg); border-radius: 6px; padding: 8px;
+    border: 1px solid var(--border);
+  }
+  .log-entry { margin-bottom: 4px; }
+  .log-entry .tag { padding: 1px 6px; border-radius: 3px; font-size: 9px; margin-right: 6px; }
+  .log-observation { color: #60a5fa; }
+  .log-research    { color: #a78bfa; }
+  .log-decision    { color: #f59e0b; }
+  .log-implementation { color: var(--green); }
+  .log-system      { color: var(--red); }
+
+  /* Signal badge */
+  #signal-card { grid-column: 1 / 3; }
+  .signal-display { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
+  .signal-badge {
+    font-size: 36px; font-weight: 900; letter-spacing: 4px; padding: 12px 28px;
+    border-radius: 10px;
+  }
+  .signal-BUY  { background: #14532d; color: var(--green); }
+  .signal-SELL { background: #450a0a; color: var(--red); }
+  .signal-HOLD { background: #422006; color: var(--yellow); }
+  .signal-NONE { background: #1e2330; color: var(--muted); }
+  .signal-meta { line-height: 1.8; }
+  .signal-meta span { display: block; color: var(--muted); }
+  .signal-meta strong { color: var(--text); }
+
+  /* Controls */
+  #controls-card { grid-column: 3; }
+  .control-group { margin-bottom: 16px; }
+  .control-group label { display: block; font-size: 10px; color: var(--muted); margin-bottom: 4px; letter-spacing: 1px; }
+  .control-group input, .control-group select {
+    width: 100%; background: var(--bg); border: 1px solid var(--border);
+    color: var(--text); padding: 6px 10px; border-radius: 6px; font-family: inherit;
+    font-size: 12px;
+  }
+  .btn {
+    width: 100%; padding: 8px; border-radius: 6px; border: none;
+    cursor: pointer; font-family: inherit; font-size: 12px; font-weight: 700;
+    margin-top: 4px; letter-spacing: 1px;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-secondary { background: #1e2330; color: var(--text); }
+  .btn:hover { opacity: .85; }
+
+  /* Run trigger */
+  #run-section { padding: 0 24px 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  #symbol-input {
+    flex: 1; max-width: 180px; background: var(--surface);
+    border: 1px solid var(--border); color: var(--text);
+    padding: 8px 14px; border-radius: 8px; font-family: inherit; font-size: 14px;
+  }
+  #run-btn { padding: 8px 28px; border-radius: 8px; border: none; background: var(--accent); color: #fff; font-weight: 700; cursor: pointer; font-family: inherit; font-size: 13px; }
+  #run-btn:disabled { opacity: .4; cursor: not-allowed; }
+  #run-status { color: var(--muted); font-size: 11px; }
+  #perf-btn {
+    padding: 8px 20px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text); font-weight: 700;
+    cursor: pointer; font-family: inherit; font-size: 13px; margin-left: auto;
+    transition: border-color .15s;
+  }
+  #perf-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* Watchlist */
+  .watchlist-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .chip {
+    background: #1e2330; border: 1px solid var(--border); border-radius: 20px;
+    padding: 3px 10px; font-size: 11px; display: flex; align-items: center; gap: 6px;
+    cursor: default;
+  }
+  .chip.active { border-color: var(--accent); color: var(--accent); }
+  .chip-remove { cursor: pointer; color: var(--muted); font-size: 13px; line-height: 1; }
+  .chip-remove:hover { color: var(--red); }
+  .watchlist-add { display: flex; gap: 8px; }
+  .watchlist-add input { flex: 1; background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 5px 10px; border-radius: 6px; font-family: inherit; font-size: 12px; }
+  .watchlist-add button { background: var(--accent); border: none; color: #fff; padding: 5px 14px; border-radius: 6px; cursor: pointer; font-family: inherit; font-size: 12px; }
+
+  /* Signal history table */
+  .hist-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .hist-table th { text-align: left; color: var(--muted); font-size: 9px; letter-spacing: 1px; padding: 4px 6px; border-bottom: 1px solid var(--border); }
+  .hist-table td { padding: 5px 6px; border-bottom: 1px solid #1e2330; }
+  .hist-table tr:last-child td { border: none; }
+  .hist-scroll { max-height: 200px; overflow-y: auto; }
+  .act-BUY  { color: var(--green); font-weight: 700; }
+  .act-SELL { color: var(--red);   font-weight: 700; }
+  .act-HOLD { color: var(--yellow);font-weight: 700; }
+
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>⬡ HEDGE BOT — COMMAND CENTER</h1>
+  <div style="display:flex;gap:12px;align-items:center">
+    <span id="halt-status" style="font-size:11px;color:var(--muted)">TRADING: ACTIVE</span>
+    <button id="kill-switch" onclick="toggleHalt()">■ HALT TRADING</button>
+  </div>
+</header>
+
+<!-- Run trigger bar -->
+<div id="run-section">
+  <input id="symbol-input" type="text" placeholder="AAPL" value="AAPL" />
+  <button id="run-btn" onclick="triggerRun()">▶ RUN PIPELINE</button>
+  <span id="run-status">—</span>
+  <button id="perf-btn" onclick="window.open('performance.html','_blank')">📊 PERFORMANCE</button>
+  <button id="perf-btn" onclick="window.open('connections.html','_blank')" style="background:var(--surface);border:1px solid var(--border);color:var(--text);padding:8px 20px;border-radius:8px;font-weight:700;cursor:pointer;font-family:inherit;font-size:13px;">🔌 CONNECTIONS</button>
+  <button id="perf-btn" onclick="window.open('training.html','_blank')" style="background:var(--surface);border:1px solid var(--border);color:var(--text);padding:8px 20px;border-radius:8px;font-weight:700;cursor:pointer;font-family:inherit;font-size:13px;">🧠 TRAINING</button>
+  <button onclick="window.open('data_browser.html','_blank')" style="background:var(--surface);border:1px solid var(--border);color:var(--text);padding:8px 20px;border-radius:8px;font-weight:700;cursor:pointer;font-family:inherit;font-size:13px;">🔍 DATA</button>
+  <button onclick="window.open('insider_profile.html','_blank')" style="background:var(--surface);border:1px solid var(--border);color:var(--text);padding:8px 20px;border-radius:8px;font-weight:700;cursor:pointer;font-family:inherit;font-size:13px;">👤 INSIDERS</button>
+</div>
+
+<div class="grid">
+
+  <!-- Portfolio strip -->
+  <div class="card" id="portfolio-strip">
+    <div class="card-title">Portfolio Telemetry</div>
+    <div class="port-metrics">
+      <div class="metric"><label>EQUITY</label><span id="m-equity">—</span></div>
+      <div class="metric"><label>CASH</label><span id="m-cash">—</span></div>
+      <div class="metric"><label>BUYING POWER</label><span id="m-bp">—</span></div>
+      <div class="metric"><label>OPEN POSITIONS</label><span id="m-pos">—</span></div>
+    </div>
+  </div>
+
+  <!-- Agent pipeline -->
+  <div class="card" id="pipeline-card">
+    <div class="card-title">Agent Pipeline</div>
+    <div class="pipeline">
+      <div class="agent-box" id="box-observation">
+        <div class="agent-name">OBSERVATION</div>
+        <span class="agent-status status-idle" id="st-observation">IDLE</span>
+        <div class="agent-output" id="out-observation">—</div>
+      </div>
+      <div class="agent-box" id="box-research">
+        <div class="agent-name">RESEARCH</div>
+        <span class="agent-status status-idle" id="st-research">IDLE</span>
+        <div class="agent-output" id="out-research">—</div>
+      </div>
+      <div class="agent-box" id="box-decision">
+        <div class="agent-name">DECISION</div>
+        <span class="agent-status status-idle" id="st-decision">IDLE</span>
+        <div class="agent-output" id="out-decision">—</div>
+      </div>
+      <div class="agent-box" id="box-implementation">
+        <div class="agent-name">EXECUTION</div>
+        <span class="agent-status status-idle" id="st-implementation">IDLE</span>
+        <div class="agent-output" id="out-implementation">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Log stream -->
+  <div class="card" id="log-card" style="grid-row:2">
+    <div class="card-title">Agent Thought Log</div>
+    <div id="log-stream"></div>
+  </div>
+
+  <!-- Latest signal -->
+  <div class="card" id="signal-card" style="grid-row:3">
+    <div class="card-title">Latest Trading Signal</div>
+    <div class="signal-display">
+      <div class="signal-badge signal-NONE" id="signal-badge">—</div>
+      <div class="signal-meta" id="signal-meta">
+        <span>No signal yet</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Positions table -->
+  <div class="card" style="grid-column:3;grid-row:3">
+    <div class="card-title">Open Positions</div>
+    <table id="positions-table">
+      <thead><tr><th>SYMBOL</th><th>QTY</th><th>MKT VAL</th><th>P&L</th></tr></thead>
+      <tbody id="positions-body"><tr><td colspan="4" style="color:var(--muted)">—</td></tr></tbody>
+    </table>
+  </div>
+
+  <!-- Controls -->
+  <!-- Watchlist manager -->
+  <div class="card" style="grid-column:1/3;grid-row:4">
+    <div class="card-title">Watchlist</div>
+    <div class="watchlist-chips" id="watchlist-chips">—</div>
+    <div class="watchlist-add">
+      <input id="wl-input" type="text" placeholder="Add ticker (e.g. NVDA)" onkeydown="if(event.key==='Enter')addTicker()" />
+      <button onclick="addTicker()">+ ADD</button>
+    </div>
+  </div>
+
+  <!-- Signal history -->
+  <div class="card" style="grid-column:1/3;grid-row:5">
+    <div class="card-title">Signal History</div>
+    <div class="hist-scroll">
+      <table class="hist-table">
+        <thead><tr><th>TIME</th><th>SYMBOL</th><th>ACTION</th><th>QTY</th><th>CONFIDENCE</th><th>ORDER</th><th>RATIONALE</th></tr></thead>
+        <tbody id="signal-history-body"><tr><td colspan="7" style="color:var(--muted)">—</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Execution history -->
+  <div class="card" style="grid-column:3;grid-row:5">
+    <div class="card-title">Execution Log</div>
+    <div class="hist-scroll">
+      <table class="hist-table">
+        <thead><tr><th>TIME</th><th>SYM</th><th>STATUS</th><th>FILLED</th><th>AVG PRICE</th><th>SLIP%</th></tr></thead>
+        <tbody id="exec-history-body"><tr><td colspan="6" style="color:var(--muted)">—</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Risk Controls -->
+  <div class="card" id="controls-card" style="grid-row:4;grid-column:3">
+    <div class="card-title">Risk Override</div>
+    <div class="control-group">
+      <label>MAX POSITION SIZE (%)</label>
+      <input type="number" id="ctrl-pos" min="0.01" max="1" step="0.01" value="0.05" />
+    </div>
+    <div class="control-group">
+      <label>MAX PORTFOLIO RISK (%)</label>
+      <input type="number" id="ctrl-risk" min="0.01" max="1" step="0.01" value="0.20" />
+    </div>
+    <div class="control-group">
+      <label>ORDER TYPE</label>
+      <select id="ctrl-order">
+        <option value="limit">LIMIT</option>
+        <option value="market">MARKET</option>
+      </select>
+    </div>
+    <button class="btn btn-primary" onclick="applyRisk()">APPLY RISK PARAMS</button>
+  </div>
+
+</div>
+
+<script>
+const API = 'http://localhost:8000';
+let currentWs  = null;
+let currentRun = null;
+let halted     = false;
+
+// ── Utility ────────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const fmt = n => n == null ? '—' : new Intl.NumberFormat('en-US', {style:'currency',currency:'USD',minimumFractionDigits:2}).format(n);
+
+// ── Portfolio refresh ──────────────────────────────────────────────────────
+async function refreshPortfolio() {
+  try {
+    const r = await fetch(`${API}/portfolio`);
+    if (!r.ok) return;
+    const d = await r.json();
+    if (d.error) return;
+    $('m-equity').textContent = fmt(d.equity);
+    $('m-cash').textContent   = fmt(d.cash);
+    $('m-bp').textContent     = fmt(d.buying_power);
+    $('m-pos').textContent    = d.positions.length;
+
+    const tbody = $('positions-body');
+    if (!d.positions.length) {
+      tbody.innerHTML = '<tr><td colspan="4" style="color:var(--muted)">No open positions</td></tr>';
+      return;
+    }
+    tbody.innerHTML = d.positions.map(p => {
+      const pct   = (parseFloat(p.unrealized_plpc) * 100).toFixed(2);
+      const cls   = p.unrealized_pl >= 0 ? 'pos' : 'neg';
+      return `<tr>
+        <td><strong>${p.symbol}</strong></td>
+        <td>${p.qty}</td>
+        <td>${fmt(p.market_value)}</td>
+        <td class="${cls}">${p.unrealized_pl >= 0 ? '+' : ''}${fmt(p.unrealized_pl)} (${pct}%)</td>
+      </tr>`;
+    }).join('');
+  } catch(_) {}
+}
+
+// ── Agent pipeline UI ──────────────────────────────────────────────────────
+function setAgentStatus(agent, status, output) {
+  const el = $(`st-${agent}`);
+  if (!el) return;
+  el.className = `agent-status status-${status}`;
+  el.textContent = status.toUpperCase();
+  if (output !== undefined) {
+    $(`out-${agent}`).textContent = typeof output === 'object'
+      ? JSON.stringify(output, null, 2)
+      : String(output);
+  }
+}
+
+function resetPipeline() {
+  ['observation','research','decision','implementation'].forEach(a => {
+    setAgentStatus(a, 'idle', '—');
+  });
+  $('signal-badge').className = 'signal-badge signal-NONE';
+  $('signal-badge').textContent = '—';
+  $('signal-meta').innerHTML = '<span>Awaiting run…</span>';
+}
+
+// ── Log stream ─────────────────────────────────────────────────────────────
+function appendLog(entry) {
+  const el  = $('log-stream');
+  const cls = `log-${entry.agent || 'system'}`;
+  const ts  = entry.ts ? entry.ts.split('T')[1].split('.')[0] : '';
+  const msg = entry.msg || (entry.output ? '→ output received' : entry.status || '');
+  el.innerHTML += `<div class="log-entry">
+    <span style="color:var(--muted)">${ts}</span>
+    <span class="tag ${cls}">${(entry.agent||'sys').toUpperCase()}</span>
+    <span class="${cls}">${msg}</span>
+  </div>`;
+  el.scrollTop = el.scrollHeight;
+}
+
+// ── Signal display ─────────────────────────────────────────────────────────
+function displaySignal(sig) {
+  if (!sig || !sig.action) return;
+  const badge = $('signal-badge');
+  badge.className = `signal-badge signal-${sig.action}`;
+  badge.textContent = sig.action;
+  $('signal-meta').innerHTML = `
+    <span><strong>${sig.symbol}</strong> &nbsp; qty: <strong>${sig.quantity}</strong></span>
+    <span>Confidence: <strong>${(sig.confidence * 100).toFixed(0)}%</strong></span>
+    <span>Order: <strong>${sig.order_type?.toUpperCase()}</strong>${sig.limit_price ? ` @ ${sig.limit_price}` : ''}</span>
+    <span style="color:var(--muted);font-size:10px">${sig.rationale || ''}</span>
+  `;
+}
+
+// ── WebSocket handler ──────────────────────────────────────────────────────
+function connectWs(runId) {
+  if (currentWs) currentWs.close();
+  currentWs = new WebSocket(`ws://localhost:8000/ws/${runId}`);
+
+  currentWs.onmessage = ({ data }) => {
+    let e;
+    try { e = JSON.parse(data); } catch(_) { return; }
+
+    appendLog(e);
+
+    if (e.agent && e.agent !== 'system') {
+      setAgentStatus(e.agent, e.status, e.output);
+    }
+
+    // Capture signal from decision output
+    if (e.agent === 'decision' && e.output) {
+      displaySignal(e.output);
+    }
+
+    if (e.status === 'completed' && e.agent === 'system') {
+      $('run-btn').disabled = false;
+      $('run-status').textContent = '✔ Run complete';
+      refreshPortfolio();
+    }
+    if (e.status === 'error') {
+      $('run-btn').disabled = false;
+      $('run-status').textContent = '✖ Error — see log';
+    }
+  };
+}
+
+// Also subscribe to system channel for kill-switch events
+const sysWs = new WebSocket(`ws://localhost:8000/ws/system`);
+sysWs.onmessage = ({ data }) => {
+  let e; try { e = JSON.parse(data); } catch(_) { return; }
+  appendLog(e);
+  if (e.status === 'HALTED')  updateHaltUI(true);
+  if (e.status === 'RESUMED') updateHaltUI(false);
+};
+
+// ── Pipeline run trigger ────────────────────────────────────────────────────
+async function triggerRun() {
+  if (halted) { alert('Kill-switch is active. Resume trading first.'); return; }
+  const sym = $('symbol-input').value.trim().toUpperCase();
+  if (!sym) return;
+  resetPipeline();
+  $('log-stream').innerHTML = '';
+  $('run-btn').disabled = true;
+  $('run-status').textContent = `Queuing run for ${sym}…`;
+
+  const r = await fetch(`${API}/run`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({symbol: sym}),
+  });
+  const d = await r.json();
+  currentRun = d.run_id;
+  $('run-status').textContent = `Run ${d.run_id.slice(0,8)}… started`;
+  connectWs(d.run_id);
+}
+
+// ── Kill-switch ────────────────────────────────────────────────────────────
+function updateHaltUI(isHalted) {
+  halted = isHalted;
+  const btn = $('kill-switch');
+  const lbl = $('halt-status');
+  if (isHalted) {
+    btn.textContent = '▶ RESUME TRADING';
+    btn.classList.add('halted');
+    lbl.textContent = 'TRADING: HALTED';
+    lbl.style.color = 'var(--red)';
+  } else {
+    btn.textContent = '■ HALT TRADING';
+    btn.classList.remove('halted');
+    lbl.textContent = 'TRADING: ACTIVE';
+    lbl.style.color = 'var(--muted)';
+  }
+}
+
+async function toggleHalt() {
+  const endpoint = halted ? '/resume' : '/halt';
+  const r = await fetch(`${API}${endpoint}`, {method:'POST'});
+  const d = await r.json();
+  updateHaltUI(d.trading_halted);
+}
+
+// ── Risk override ──────────────────────────────────────────────────────────
+async function applyRisk() {
+  const body = {
+    max_position_pct:      parseFloat($('ctrl-pos').value),
+    max_portfolio_risk_pct: parseFloat($('ctrl-risk').value),
+    default_order_type:    $('ctrl-order').value,
+  };
+  const r = await fetch(`${API}/risk`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(body),
+  });
+  if (r.ok) {
+    appendLog({agent:'system', status:'risk-update', ts: new Date().toISOString(), msg:'Risk params updated'});
+  }
+}
+
+// ── Watchlist ──────────────────────────────────────────────────────────────
+async function refreshWatchlist() {
+  try {
+    const r = await fetch(`${API}/tickers`);
+    if (!r.ok) return;
+    const tickers = await r.json();
+    const el = $('watchlist-chips');
+    if (!tickers.length) { el.innerHTML = '<span style="color:var(--muted)">Empty — add a ticker below</span>'; return; }
+    el.innerHTML = tickers.map(t => `
+      <div class="chip ${t.active ? 'active' : ''}" title="${t.name || ''}">
+        <span onclick="$('symbol-input').value='${t.symbol}'" style="cursor:pointer">${t.symbol}</span>
+        <span class="chip-remove" onclick="removeTicker('${t.symbol}')" title="Remove">×</span>
+      </div>
+    `).join('');
+  } catch(_) {}
+}
+
+async function addTicker() {
+  const sym = $('wl-input').value.trim().toUpperCase();
+  if (!sym) return;
+  try {
+    const r = await fetch(`${API}/tickers`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({symbol: sym}),
+    });
+    if (r.status === 409) { alert(`${sym} already in watchlist`); return; }
+    $('wl-input').value = '';
+    await refreshWatchlist();
+  } catch(e) { alert('Error adding ticker: ' + e); }
+}
+
+async function removeTicker(sym) {
+  if (!confirm(`Remove ${sym} from watchlist?`)) return;
+  await fetch(`${API}/tickers/${sym}`, {method: 'DELETE'});
+  await refreshWatchlist();
+}
+
+// ── Signal history ─────────────────────────────────────────────────────────
+async function refreshHistory() {
+  try {
+    const [sigR, execR] = await Promise.all([
+      fetch(`${API}/history/signals?limit=50`),
+      fetch(`${API}/history/executions?limit=50`),
+    ]);
+    const signals = await sigR.json();
+    const execs   = await execR.json();
+
+    const sbody = $('signal-history-body');
+    sbody.innerHTML = signals.length ? signals.map(s => {
+      const ts  = s.created_at ? s.created_at.split('T')[1].slice(0,8) : '—';
+      const day = s.created_at ? s.created_at.split('T')[0] : '';
+      const conf = s.confidence != null ? `${(s.confidence*100).toFixed(0)}%` : '—';
+      return `<tr>
+        <td style="color:var(--muted)">${day}<br/>${ts}</td>
+        <td><strong>${s.symbol}</strong></td>
+        <td class="act-${s.action}">${s.action}</td>
+        <td>${s.quantity}</td>
+        <td>${conf}</td>
+        <td>${(s.order_type||'—').toUpperCase()}</td>
+        <td style="color:var(--muted);font-size:10px">${s.rationale||'—'}</td>
+      </tr>`;
+    }).join('') : '<tr><td colspan="7" style="color:var(--muted)">No signals yet</td></tr>';
+
+    const ebody = $('exec-history-body');
+    ebody.innerHTML = execs.length ? execs.map(e => {
+      const ts  = e.created_at ? e.created_at.split('T')[1].slice(0,8) : '—';
+      const day = e.created_at ? e.created_at.split('T')[0] : '';
+      const slip = e.slippage_pct != null ? e.slippage_pct.toFixed(3)+'%' : '—';
+      const statusColor = {filled:'var(--green)', partial:'var(--yellow)', rejected:'var(--red)', skipped:'var(--muted)'}[e.status] || 'var(--text)';
+      return `<tr>
+        <td style="color:var(--muted)">${day}<br/>${ts}</td>
+        <td><strong>${e.symbol}</strong></td>
+        <td style="color:${statusColor}">${e.status.toUpperCase()}</td>
+        <td>${e.filled_qty}</td>
+        <td>${e.avg_fill_price ? '$'+e.avg_fill_price : '—'}</td>
+        <td>${slip}</td>
+      </tr>`;
+    }).join('') : '<tr><td colspan="6" style="color:var(--muted)">No executions yet</td></tr>';
+
+  } catch(_) {}
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────
+refreshPortfolio();
+refreshWatchlist();
+refreshHistory();
+setInterval(refreshPortfolio, 15_000);
+setInterval(refreshWatchlist, 30_000);
+setInterval(refreshHistory,   20_000);
+</script>
+</body>
+</html>
