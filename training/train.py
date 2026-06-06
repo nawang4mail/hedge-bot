@@ -14,6 +14,7 @@ import argparse
 import asyncio
 import json
 import pickle
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
@@ -33,6 +34,14 @@ from db.training_models import ModelRegistry
 
 MODELS_DIR = Path(__file__).parent.parent / "models"
 MODELS_DIR.mkdir(exist_ok=True)
+
+_TICKER_RE = re.compile(r"^[A-Z0-9.\-]{1,12}$")
+
+
+def _validate_symbol(symbol: str) -> str:
+    if not _TICKER_RE.match(symbol):
+        raise ValueError(f"Invalid ticker symbol: {symbol!r}")
+    return symbol
 
 # Features used for training (must match features.py output)
 FEATURE_COLS = [
@@ -64,6 +73,7 @@ async def train_model(
     label_threshold: float = 0.02,
     emitter: ProgressEmitter | None = None,
 ) -> dict:
+    _validate_symbol(symbol)
     N_ESTIMATORS = 300
 
     if emitter:
@@ -210,6 +220,7 @@ async def train_model(
 
 
 def _next_version(symbol: str, timeframe: str) -> int:
+    _validate_symbol(symbol)
     existing = list(MODELS_DIR.glob(f"{symbol}_{timeframe}_v*.pkl"))
     existing = [f for f in existing if "scaler" not in f.name]
     if not existing:
@@ -247,8 +258,13 @@ async def _register_model(meta: dict, model_path: str, scaler_path: str,
 
 def load_model(symbol: str, timeframe: str = "daily"):
     """Load the latest active model for a symbol."""
+    _validate_symbol(symbol)
+    _models_root = MODELS_DIR.resolve()
     pattern = list(MODELS_DIR.glob(f"{symbol}_{timeframe}_v*.pkl"))
-    pattern = [f for f in pattern if "scaler" not in f.name]
+    pattern = [
+        f for f in pattern
+        if "scaler" not in f.name and f.resolve().is_relative_to(_models_root)
+    ]
     if not pattern:
         return None, None, None
     latest = max(pattern, key=lambda f: int(f.stem.split("_v")[-1]))

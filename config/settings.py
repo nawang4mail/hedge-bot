@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     api_host: str = "0.0.0.0"
     api_port: int = 8000
 
+    # ── API authentication ────────────────────────────────────────────────────
+    # Set a strong random value in .env.  When empty, auth is disabled (dev only).
+    api_key: str = ""
+
     # ── Kill-switch (toggled at runtime, NOT persisted to .env) ──────────────
     trading_halted: bool = False
 

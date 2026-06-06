@@ -6,10 +6,10 @@ services:
     container_name: hedge_tsdb
     environment:
       POSTGRES_USER: hedge
-      POSTGRES_PASSWORD: hedge
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: hedgebot
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - tsdb_data:/var/lib/postgresql/data
     restart: unless-stopped
