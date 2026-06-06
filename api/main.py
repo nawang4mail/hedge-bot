@@ -290,6 +290,14 @@ class TickerRequest(BaseModel):
     name: str = ""
     notes: str = ""
 
+    @field_validator("symbol")
+    @classmethod
+    def validate_symbol(cls, v: str) -> str:
+        v = v.strip().upper()
+        if not _TICKER_RE.match(v):
+            raise ValueError("symbol must be 1-12 uppercase letters, digits, dots, or hyphens")
+        return v
+
 
 @app.get("/tickers")
 async def list_tickers(db: AsyncSession = Depends(get_db)):
