@@ -32,8 +32,9 @@ def _get_bq_client():
 
 def fetch_gdelt_sentiment(symbol: str, start: str, end: str,
                            on_progress: callable | None = None) -> list[dict]:
+    from google.cloud import bigquery
     client = _get_bq_client()
-    query  = f"""
+    query = """
     WITH articles AS (
       SELECT
         DATE(DATE) as article_date,
@@ -41,7 +42,7 @@ def fetch_gdelt_sentiment(symbol: str, start: str, end: str,
         CASE WHEN CAST(V2Tone_1 AS FLOAT64) > 0 THEN 1 ELSE 0 END as is_positive,
         CASE WHEN CAST(V2Tone_1 AS FLOAT64) < 0 THEN 1 ELSE 0 END as is_negative
       FROM `gdelt-bq.gdeltv2.gkg`
-      WHERE DATE >= '{start}' AND DATE <= '{end}'
+      WHERE DATE >= @start_date AND DATE <= @end_date
         AND (
           LOWER(SourceCommonName) LIKE '%finance%'
           OR LOWER(SourceCommonName) LIKE '%reuters%'
@@ -50,8 +51,8 @@ def fetch_gdelt_sentiment(symbol: str, start: str, end: str,
           OR LOWER(SourceCommonName) LIKE '%marketwatch%'
         )
         AND (
-          LOWER(Persons)       LIKE LOWER('%{symbol}%')
-          OR LOWER(Organizations) LIKE LOWER('%{symbol}%')
+          LOWER(Persons)       LIKE @symbol_pattern
+          OR LOWER(Organizations) LIKE @symbol_pattern
         )
     )
     SELECT
@@ -64,7 +65,14 @@ def fetch_gdelt_sentiment(symbol: str, start: str, end: str,
     GROUP BY article_date
     ORDER BY article_date
     """
-    raw_rows = list(client.query(query).result())
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter("start_date",     "STRING", start),
+            bigquery.ScalarQueryParameter("end_date",       "STRING", end),
+            bigquery.ScalarQueryParameter("symbol_pattern", "STRING", f"%{symbol.lower()}%"),
+        ]
+    )
+    raw_rows = list(client.query(query, job_config=job_config).result())
     total    = len(raw_rows)
     rows     = []
     for i, row in enumerate(raw_rows):

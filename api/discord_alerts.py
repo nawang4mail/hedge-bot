@@ -19,10 +19,11 @@ import json
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse
 
 import httpx
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 
@@ -181,6 +182,10 @@ async def send_embed(embed: dict, webhook_url: str | None = None,
     url = webhook_url or get_webhook_url()
     if not url:
         return False
+    try:
+        _validate_webhook_url(url)  # SSRF guard on every outbound request
+    except ValueError:
+        return False
     payload: dict = {"embeds": [embed]}
     if content:
         payload["content"] = content
@@ -264,6 +269,25 @@ async def start_watchlist_poller():
         await _poll_watchlist_once()
 
 
+# ── Webhook URL validation ────────────────────────────────────────────────────
+
+_DISCORD_WEBHOOK_HOSTS = {"discord.com", "discordapp.com"}
+
+
+def _validate_webhook_url(url: str) -> str:
+    """Reject non-Discord URLs to prevent SSRF."""
+    parsed = urlparse(url)
+    if parsed.scheme != "https" or parsed.hostname not in _DISCORD_WEBHOOK_HOSTS:
+        raise ValueError(
+            "webhook_url must be an https://discord.com/api/webhooks/… URL"
+        )
+    if not parsed.path.startswith("/api/webhooks/"):
+        raise ValueError(
+            "webhook_url must be an https://discord.com/api/webhooks/… URL"
+        )
+    return url
+
+
 # ── FastAPI router ─────────────────────────────────────────────────────────────
 
 router = APIRouter(prefix="/discord", tags=["discord"])
@@ -272,6 +296,11 @@ router = APIRouter(prefix="/discord", tags=["discord"])
 class DiscordSettings(BaseModel):
     webhook_url: str
     bot_token:   Optional[str] = None
+
+    @field_validator("webhook_url")
+    @classmethod
+    def check_webhook_url(cls, v: str) -> str:
+        return _validate_webhook_url(v)
 
 
 @router.get("/status")
