@@ -7,7 +7,7 @@ from pydantic import Field
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     # ── Local LLM ────────────────────────────────────────────────────────────
     ollama_base_url: str = "http://localhost:11434"
