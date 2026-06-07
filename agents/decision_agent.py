@@ -65,6 +65,7 @@ def _calculate_position_size(
 # ── Agent node ────────────────────────────────────────────────────────────────
 
 def decision_node(state: dict[str, Any]) -> dict[str, Any]:
+    logs = list(state.get("agent_logs") or [])
     s = AgentState(**state)
     logs = list(s.agent_logs)
 
@@ -88,7 +89,7 @@ def decision_node(state: dict[str, Any]) -> dict[str, Any]:
             )
             logs.append({"agent": "decision", "status": "completed",
                          "output": json.loads(signal.model_dump_json())})
-            return {"trading_signal": signal, "agent_logs": logs}
+            return {**state, "trading_signal": signal, "agent_logs": logs}
 
         # ── Build flat feature dict for ML model ──────────────────────────
         feature_dict = {
@@ -192,8 +193,8 @@ def decision_node(state: dict[str, Any]) -> dict[str, Any]:
             "output": json.loads(signal.model_dump_json()),
         })
 
-        return {"trading_signal": signal, "agent_logs": logs}
+        return {**state, "trading_signal": signal, "agent_logs": logs}
 
     except Exception as exc:
         logs.append({"agent": "decision", "status": "error", "msg": str(exc)})
-        return {"error": str(exc), "agent_logs": logs}
+        return {**state, "error": str(exc), "agent_logs": logs}

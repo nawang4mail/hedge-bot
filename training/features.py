@@ -199,11 +199,15 @@ def compute_indicators(df: pd.DataFrame) -> pd.DataFrame:
 
     bb = ta.bbands(close, length=20)
     if bb is not None:
-        df["bb_upper"] = bb["BBU_20_2.0"]
-        df["bb_lower"] = bb["BBL_20_2.0"]
-        df["bb_mid"]   = bb["BBM_20_2.0"]
-        df["bb_width"] = (bb["BBU_20_2.0"] - bb["BBL_20_2.0"]) / bb["BBM_20_2.0"]
-        df["bb_pct"]   = (close - bb["BBL_20_2.0"]) / (bb["BBU_20_2.0"] - bb["BBL_20_2.0"])
+        bbu = next((c for c in bb.columns if c.startswith("BBU_")), None)
+        bbl = next((c for c in bb.columns if c.startswith("BBL_")), None)
+        bbm = next((c for c in bb.columns if c.startswith("BBM_")), None)
+        if bbu and bbl and bbm:
+            df["bb_upper"] = bb[bbu]
+            df["bb_lower"] = bb[bbl]
+            df["bb_mid"]   = bb[bbm]
+            df["bb_width"] = (bb[bbu] - bb[bbl]) / bb[bbm]
+            df["bb_pct"]   = (close - bb[bbl]) / (bb[bbu] - bb[bbl])
 
     stoch = ta.stoch(high, low, close)
     if stoch is not None:
@@ -290,7 +294,9 @@ async def build_features(
                        "insider_net_shares_30d", "insider_buy_value_30d"]),
     ]:
         if not sentiment_df.empty:
-            df_date = df_date.join(sentiment_df[cols], how="left")
+            new_cols = [c for c in cols if c not in df_date.columns]
+            if new_cols:
+                df_date = df_date.join(sentiment_df[new_cols], how="left")
 
     # Forward-fill sentiment (weekend news affects Monday trading)
     sentiment_cols = ["news_sentiment", "news_article_count", "news_tone",
@@ -299,7 +305,7 @@ async def build_features(
     for col in sentiment_cols:
         if col not in df_date.columns:
             df_date[col] = 0.0
-    df_date[sentiment_cols] = df_date[sentiment_cols].fillna(method="ffill").fillna(0)
+    df_date[sentiment_cols] = df_date[sentiment_cols].ffill().fillna(0)
 
     # Earnings proximity flag
     df_date["earnings_week"] = (

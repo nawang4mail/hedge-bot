@@ -85,6 +85,7 @@ def _calc_slippage(signal: TradingSignal, avg_price: float | None) -> float | No
 # ── Agent node ────────────────────────────────────────────────────────────────
 
 def implementation_node(state: dict[str, Any]) -> dict[str, Any]:
+    logs = list(state.get("agent_logs") or [])
     s    = AgentState(**state)
     logs = list(s.agent_logs)
     signal: TradingSignal = s.trading_signal
@@ -107,7 +108,7 @@ def implementation_node(state: dict[str, Any]) -> dict[str, Any]:
             "ts": datetime.now(timezone.utc).isoformat(),
             "output": json.loads(report.model_dump_json()),
         })
-        return {"execution_report": report, "agent_logs": logs}
+        return {**state, "execution_report": report, "agent_logs": logs}
 
     # ── Guard: keys must be configured ────────────────────────────────────
     if not settings.alpaca_api_key:
@@ -117,7 +118,7 @@ def implementation_node(state: dict[str, Any]) -> dict[str, Any]:
         )
         logs.append({"agent": "implementation", "status": "completed",
                      "output": json.loads(report.model_dump_json())})
-        return {"execution_report": report, "agent_logs": logs}
+        return {**state, "execution_report": report, "agent_logs": logs}
 
     try:
         order = _place_order(signal)
@@ -149,9 +150,9 @@ def implementation_node(state: dict[str, Any]) -> dict[str, Any]:
             "output": json.loads(report.model_dump_json()),
         })
 
-        return {"execution_report": report, "agent_logs": logs}
+        return {**state, "execution_report": report, "agent_logs": logs}
 
     except Exception as exc:
         report = ExecutionReport(status="rejected", message=str(exc))
         logs.append({"agent": "implementation", "status": "error", "msg": str(exc)})
-        return {"execution_report": report, "error": str(exc), "agent_logs": logs}
+        return {**state, "execution_report": report, "error": str(exc), "agent_logs": logs}

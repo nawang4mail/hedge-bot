@@ -72,7 +72,7 @@ async def upsert_candles(db: AsyncSession, symbol: str, candles: list[dict]) -> 
         })
 
     stmt = pg_insert(OHLCV).values(rows).on_conflict_do_nothing(
-        constraint="uq_ohlcv_symbol_ts"
+        index_elements=["symbol", "ts"]
     )
     result = await db.execute(stmt)
     return result.rowcount

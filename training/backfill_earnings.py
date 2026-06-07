@@ -18,10 +18,28 @@ EDGAR_HEADERS = {"User-Agent": "hedge_bot/1.0 nawang4mail@gmail.com"}
 
 
 def fetch_earnings(symbol: str) -> list[dict]:
-    ticker  = yf.Ticker(symbol)
-    history = ticker.earnings_history
-    if history is None or history.empty:
-        return []
+    ticker = yf.Ticker(symbol)
+
+    # Try earnings_dates first — 20+ quarters of history (requires lxml)
+    # Columns: "EPS Estimate", "Reported EPS", "Surprise(%)" — Surprise in pct points
+    use_dates_path = False
+    history = None
+    try:
+        history = ticker.earnings_dates
+        if history is not None and not history.empty:
+            history = history.dropna(subset=["Reported EPS"])
+            use_dates_path = True
+    except Exception:
+        history = None
+
+    # Fall back to earnings_history — only ~4 quarters, no lxml needed
+    # Columns: epsActual, epsEstimate, surprisePercent — Surprise already decimal (0.10 = 10%)
+    if not use_dates_path or history is None or history.empty:
+        history = ticker.earnings_history
+        if history is None or history.empty:
+            return []
+        use_dates_path = False
+
     rows = []
     for idx, row in history.iterrows():
         try:
@@ -29,9 +47,16 @@ def fetch_earnings(symbol: str) -> list[dict]:
                         datetime.fromisoformat(str(idx)).replace(tzinfo=timezone.utc)
             if report_dt.tzinfo is None:
                 report_dt = report_dt.replace(tzinfo=timezone.utc)
-            eps_est    = float(row.get("EPS Estimate", 0) or 0)
-            eps_actual = float(row.get("Reported EPS", 0) or 0)
-            surprise   = float(row.get("Surprise(%)", 0) or 0)
+
+            if use_dates_path:
+                eps_est    = float(row.get("EPS Estimate", 0) or 0)
+                eps_actual = float(row.get("Reported EPS", 0) or 0)
+                surprise   = float(row.get("Surprise(%)", 0) or 0) / 100.0  # pct → decimal
+            else:
+                eps_est    = float(row.get("epsEstimate", 0) or 0)
+                eps_actual = float(row.get("epsActual", 0) or 0)
+                surprise   = float(row.get("surprisePercent", 0) or 0)  # already decimal
+
             rows.append({
                 "symbol": symbol.upper(), "report_date": report_dt,
                 "fiscal_quarter": None,
