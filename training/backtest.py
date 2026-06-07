@@ -19,8 +19,8 @@ import numpy as np
 import pandas as pd
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from training.features import build_features, FEATURE_COLS
-from training.train import load_model
+from training.features import build_features
+from training.train import load_model, FEATURE_COLS
 from db.connection import AsyncSessionLocal, init_db
 from db.training_models import BacktestResult
 
