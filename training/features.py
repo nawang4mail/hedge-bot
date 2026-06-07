@@ -199,11 +199,15 @@ def compute_indicators(df: pd.DataFrame) -> pd.DataFrame:
 
     bb = ta.bbands(close, length=20)
     if bb is not None:
-        df["bb_upper"] = bb["BBU_20_2.0"]
-        df["bb_lower"] = bb["BBL_20_2.0"]
-        df["bb_mid"]   = bb["BBM_20_2.0"]
-        df["bb_width"] = (bb["BBU_20_2.0"] - bb["BBL_20_2.0"]) / bb["BBM_20_2.0"]
-        df["bb_pct"]   = (close - bb["BBL_20_2.0"]) / (bb["BBU_20_2.0"] - bb["BBL_20_2.0"])
+        bbu = next((c for c in bb.columns if c.startswith("BBU_")), None)
+        bbl = next((c for c in bb.columns if c.startswith("BBL_")), None)
+        bbm = next((c for c in bb.columns if c.startswith("BBM_")), None)
+        if bbu and bbl and bbm:
+            df["bb_upper"] = bb[bbu]
+            df["bb_lower"] = bb[bbl]
+            df["bb_mid"]   = bb[bbm]
+            df["bb_width"] = (bb[bbu] - bb[bbl]) / bb[bbm]
+            df["bb_pct"]   = (close - bb[bbl]) / (bb[bbu] - bb[bbl])
 
     stoch = ta.stoch(high, low, close)
     if stoch is not None:
