@@ -14,7 +14,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from sqlalchemy import (
     Column, String, Float, Boolean, Integer,
-    DateTime, Text, JSON, UniqueConstraint, Index, ForeignKey
+    DateTime, Text, JSON, UniqueConstraint, ForeignKey
 )
 from db.connection import Base
 
@@ -27,14 +27,10 @@ def _now():
 
 class OHLCVHourly(Base):
     __tablename__ = "ohlcv_hourly"
-    __table_args__ = (
-        UniqueConstraint("symbol", "ts", name="uq_ohlcv_hourly_symbol_ts"),
-        Index("ix_ohlcv_hourly_symbol_ts", "symbol", "ts"),
-    )
 
-    id     = Column(Integer, primary_key=True, autoincrement=True)
-    symbol = Column(String(16), ForeignKey("tickers.symbol", ondelete="CASCADE"), nullable=False)
-    ts     = Column(DateTime(timezone=True), nullable=False)
+    symbol = Column(String(16), ForeignKey("tickers.symbol", ondelete="CASCADE"),
+                    nullable=False, primary_key=True)
+    ts     = Column(DateTime(timezone=True), nullable=False, primary_key=True)
     open   = Column(Float, nullable=False)
     high   = Column(Float, nullable=False)
     low    = Column(Float, nullable=False)
