@@ -65,11 +65,14 @@ def fetch_gdelt_sentiment(symbol: str, start: str, end: str,
     GROUP BY article_date
     ORDER BY article_date
     """
+    # GDELT DATE column is FLOAT64 in YYYYMMDDHHMMSS format (e.g. 20240101120000.0)
+    start_f = float(start.replace("-", "") + "000000")
+    end_f   = float(end.replace("-", "")   + "235959")
     job_config = bigquery.QueryJobConfig(
         query_parameters=[
-            bigquery.ScalarQueryParameter("start_date",     "STRING", start),
-            bigquery.ScalarQueryParameter("end_date",       "STRING", end),
-            bigquery.ScalarQueryParameter("symbol_pattern", "STRING", f"%{symbol.lower()}%"),
+            bigquery.ScalarQueryParameter("start_date",     "FLOAT64", start_f),
+            bigquery.ScalarQueryParameter("end_date",       "FLOAT64", end_f),
+            bigquery.ScalarQueryParameter("symbol_pattern", "STRING",  f"%{symbol.lower()}%"),
         ]
     )
     raw_rows = list(client.query(query, job_config=job_config).result())
