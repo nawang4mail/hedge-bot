@@ -18,14 +18,16 @@ Endpoints:
 """
 from __future__ import annotations
 import asyncio
+import re
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, BackgroundTasks, Depends
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, BackgroundTasks, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agents import run_pipeline, AgentState
@@ -78,12 +80,35 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Hedge Bot API", version="1.0.0", lifespan=lifespan)
 
+# ── CORS ──────────────────────────────────────────────────────────────────────
+# Restrict to localhost origins. Expand in .env via ALLOWED_ORIGINS if needed.
+_ALLOWED_ORIGINS = ["http://localhost", "http://127.0.0.1", "null"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],   # tighten in production
+    allow_origins=_ALLOWED_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── API-key authentication middleware ─────────────────────────────────────────
+# Paths that do NOT require authentication (read-only, low-risk).
+_AUTH_EXEMPT = {"/health"}
+_AUTH_EXEMPT_PREFIXES = ("/status/", "/ws/")
+
+@app.middleware("http")
+async def api_key_middleware(request: Request, call_next):
+    path = request.url.path
+    if path in _AUTH_EXEMPT or any(path.startswith(p) for p in _AUTH_EXEMPT_PREFIXES):
+        return await call_next(request)
+
+    expected = settings.api_key
+    if expected:  # auth is disabled when API_KEY is not set (development mode)
+        provided = request.headers.get("X-API-Key", "")
+        if provided != expected:
+            return JSONResponse({"detail": "Unauthorized"}, status_code=401)
+
+    return await call_next(request)
 app.include_router(connections_router)
 app.include_router(data_router)
 app.include_router(insider_router)
@@ -92,8 +117,19 @@ app.include_router(discord_router)
 
 # ── Request/Response models ───────────────────────────────────────────────────
 
+_TICKER_RE = re.compile(r'^[A-Z0-9.\-]{1,12}$')
+
+
 class RunRequest(BaseModel):
     symbol: str
+
+    @field_validator("symbol")
+    @classmethod
+    def validate_symbol(cls, v: str) -> str:
+        v = v.strip().upper()
+        if not _TICKER_RE.match(v):
+            raise ValueError("symbol must be 1-12 uppercase letters, digits, dots, or hyphens")
+        return v
 
 class RiskOverride(BaseModel):
     max_position_pct: float | None = None
@@ -253,6 +289,14 @@ class TickerRequest(BaseModel):
     symbol: str
     name: str = ""
     notes: str = ""
+
+    @field_validator("symbol")
+    @classmethod
+    def validate_symbol(cls, v: str) -> str:
+        v = v.strip().upper()
+        if not _TICKER_RE.match(v):
+            raise ValueError("symbol must be 1-12 uppercase letters, digits, dots, or hyphens")
+        return v
 
 
 @app.get("/tickers")
@@ -450,6 +494,29 @@ async def list_models(db: AsyncSession = Depends(get_db)):
         select(ModelRegistry).order_by(ModelRegistry.symbol, ModelRegistry.timeframe)
     )
     return [r.to_dict() for r in result.scalars().all()]
+
+
+@app.delete("/training/models/{model_id}", status_code=200)
+async def delete_model(model_id: int, db: AsyncSession = Depends(get_db)):
+    from db.training_models import ModelRegistry
+    from sqlalchemy import select, delete as sa_delete
+    import os
+
+    result = await db.execute(select(ModelRegistry).where(ModelRegistry.id == model_id))
+    model = result.scalar_one_or_none()
+    if model is None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Model not found")
+
+    # Remove .pkl, scaler, and meta JSON files
+    meta_path = model.file_path.replace(".pkl", "_meta.json") if model.file_path else None
+    for path in [model.file_path, model.scaler_path, meta_path]:
+        if path and os.path.exists(path):
+            os.remove(path)
+
+    await db.execute(sa_delete(ModelRegistry).where(ModelRegistry.id == model_id))
+    await db.commit()
+    return {"deleted": model_id}
 
 
 @app.get("/training/backtests")

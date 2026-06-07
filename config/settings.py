@@ -7,7 +7,7 @@ from pydantic import Field
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     # ── Local LLM ────────────────────────────────────────────────────────────
     ollama_base_url: str = "http://localhost:11434"
@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     # ── Server ────────────────────────────────────────────────────────────────
     api_host: str = "0.0.0.0"
     api_port: int = 8000
+
+    # ── API authentication ────────────────────────────────────────────────────
+    # Set a strong random value in .env.  When empty, auth is disabled (dev only).
+    api_key: str = ""
 
     # ── Kill-switch (toggled at runtime, NOT persisted to .env) ──────────────
     trading_halted: bool = False

@@ -32,16 +32,17 @@ def _get_bq_client():
 
 def fetch_gdelt_sentiment(symbol: str, start: str, end: str,
                            on_progress: callable | None = None) -> list[dict]:
+    from google.cloud import bigquery
     client = _get_bq_client()
-    query  = f"""
+    query = """
     WITH articles AS (
       SELECT
-        DATE(DATE) as article_date,
-        CAST(V2Tone_1 AS FLOAT64) as tone,
-        CASE WHEN CAST(V2Tone_1 AS FLOAT64) > 0 THEN 1 ELSE 0 END as is_positive,
-        CASE WHEN CAST(V2Tone_1 AS FLOAT64) < 0 THEN 1 ELSE 0 END as is_negative
+        PARSE_DATE('%Y%m%d', SUBSTR(CAST(DATE AS STRING), 1, 8)) as article_date,
+        SAFE_CAST(SPLIT(V2Tone, ',')[SAFE_OFFSET(0)] AS FLOAT64) as tone,
+        CASE WHEN SAFE_CAST(SPLIT(V2Tone, ',')[SAFE_OFFSET(0)] AS FLOAT64) > 0 THEN 1 ELSE 0 END as is_positive,
+        CASE WHEN SAFE_CAST(SPLIT(V2Tone, ',')[SAFE_OFFSET(0)] AS FLOAT64) < 0 THEN 1 ELSE 0 END as is_negative
       FROM `gdelt-bq.gdeltv2.gkg`
-      WHERE DATE >= '{start}' AND DATE <= '{end}'
+      WHERE DATE >= @start_date AND DATE <= @end_date
         AND (
           LOWER(SourceCommonName) LIKE '%finance%'
           OR LOWER(SourceCommonName) LIKE '%reuters%'
@@ -50,8 +51,8 @@ def fetch_gdelt_sentiment(symbol: str, start: str, end: str,
           OR LOWER(SourceCommonName) LIKE '%marketwatch%'
         )
         AND (
-          LOWER(Persons)       LIKE LOWER('%{symbol}%')
-          OR LOWER(Organizations) LIKE LOWER('%{symbol}%')
+          LOWER(Persons)       LIKE @symbol_pattern
+          OR LOWER(Organizations) LIKE @symbol_pattern
         )
     )
     SELECT
@@ -64,7 +65,17 @@ def fetch_gdelt_sentiment(symbol: str, start: str, end: str,
     GROUP BY article_date
     ORDER BY article_date
     """
-    raw_rows = list(client.query(query).result())
+    # GDELT DATE column is INT64 in YYYYMMDDHHMMSS format (e.g. 20240101120000)
+    start_i = int(start.replace("-", "") + "000000")
+    end_i   = int(end.replace("-", "")   + "235959")
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter("start_date",     "INT64",  start_i),
+            bigquery.ScalarQueryParameter("end_date",       "INT64",  end_i),
+            bigquery.ScalarQueryParameter("symbol_pattern", "STRING", f"%{symbol.lower()}%"),
+        ]
+    )
+    raw_rows = list(client.query(query, job_config=job_config).result())
     total    = len(raw_rows)
     rows     = []
     for i, row in enumerate(raw_rows):

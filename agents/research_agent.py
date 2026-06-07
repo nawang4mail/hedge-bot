@@ -75,8 +75,12 @@ def _compute_indicators(snapshot: MarketSnapshot) -> dict[str, Any]:
     # Bollinger Bands
     bb = ta.bbands(close, length=20)
     if bb is not None and not bb.empty:
-        result["bollinger_upper"] = round(float(bb["BBU_20_2.0"].iloc[-1]), 4)
-        result["bollinger_lower"] = round(float(bb["BBL_20_2.0"].iloc[-1]), 4)
+        bbu_col = next((c for c in bb.columns if c.startswith("BBU_")), None)
+        bbl_col = next((c for c in bb.columns if c.startswith("BBL_")), None)
+        if bbu_col:
+            result["bollinger_upper"] = round(float(bb[bbu_col].iloc[-1]), 4)
+        if bbl_col:
+            result["bollinger_lower"] = round(float(bb[bbl_col].iloc[-1]), 4)
 
     # Volume spike: today's volume > 2× 20-day average
     avg_vol = float(vol.rolling(20).mean().iloc[-1]) if len(vol) >= 20 else float(vol.mean())
@@ -105,6 +109,7 @@ def _detect_anomalies(indicators: dict, snapshot: MarketSnapshot) -> list[str]:
 # ── Agent node ────────────────────────────────────────────────────────────────
 
 def research_node(state: dict[str, Any]) -> dict[str, Any]:
+    logs = list(state.get("agent_logs") or [])
     s = AgentState(**state)
     logs = list(s.agent_logs)
 
@@ -204,8 +209,8 @@ def research_node(state: dict[str, Any]) -> dict[str, Any]:
             "output": json.loads(report.model_dump_json()),
         })
 
-        return {"research_report": report, "agent_logs": logs}
+        return {**state, "research_report": report, "agent_logs": logs}
 
     except Exception as exc:
         logs.append({"agent": "research", "status": "error", "msg": str(exc)})
-        return {"error": str(exc), "agent_logs": logs}
+        return {**state, "error": str(exc), "agent_logs": logs}
