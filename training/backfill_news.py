@@ -37,7 +37,7 @@ def fetch_gdelt_sentiment(symbol: str, start: str, end: str,
     query = """
     WITH articles AS (
       SELECT
-        DATE(DATE) as article_date,
+        PARSE_DATE('%Y%m%d', SUBSTR(CAST(DATE AS STRING), 1, 8)) as article_date,
         CAST(V2Tone_1 AS FLOAT64) as tone,
         CASE WHEN CAST(V2Tone_1 AS FLOAT64) > 0 THEN 1 ELSE 0 END as is_positive,
         CASE WHEN CAST(V2Tone_1 AS FLOAT64) < 0 THEN 1 ELSE 0 END as is_negative
@@ -65,14 +65,14 @@ def fetch_gdelt_sentiment(symbol: str, start: str, end: str,
     GROUP BY article_date
     ORDER BY article_date
     """
-    # GDELT DATE column is FLOAT64 in YYYYMMDDHHMMSS format (e.g. 20240101120000.0)
-    start_f = float(start.replace("-", "") + "000000")
-    end_f   = float(end.replace("-", "")   + "235959")
+    # GDELT DATE column is INT64 in YYYYMMDDHHMMSS format (e.g. 20240101120000)
+    start_i = int(start.replace("-", "") + "000000")
+    end_i   = int(end.replace("-", "")   + "235959")
     job_config = bigquery.QueryJobConfig(
         query_parameters=[
-            bigquery.ScalarQueryParameter("start_date",     "FLOAT64", start_f),
-            bigquery.ScalarQueryParameter("end_date",       "FLOAT64", end_f),
-            bigquery.ScalarQueryParameter("symbol_pattern", "STRING",  f"%{symbol.lower()}%"),
+            bigquery.ScalarQueryParameter("start_date",     "INT64",  start_i),
+            bigquery.ScalarQueryParameter("end_date",       "INT64",  end_i),
+            bigquery.ScalarQueryParameter("symbol_pattern", "STRING", f"%{symbol.lower()}%"),
         ]
     )
     raw_rows = list(client.query(query, job_config=job_config).result())
