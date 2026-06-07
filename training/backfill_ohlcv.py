@@ -81,11 +81,16 @@ def fetch_hourly_chunked(symbol: str, start: str, end: str,
 
 # ── DB upsert ─────────────────────────────────────────────────────────────────
 
-async def upsert_rows(rows: list[dict], model, constraint: str) -> int:
+async def upsert_rows(rows: list[dict], model, constraint: str | None = None,
+                      index_elements: list[str] | None = None) -> int:
     if not rows:
         return 0
     async with AsyncSessionLocal() as db:
-        stmt   = pg_insert(model).values(rows).on_conflict_do_nothing(constraint=constraint)
+        ins = pg_insert(model).values(rows)
+        if index_elements:
+            stmt = ins.on_conflict_do_nothing(index_elements=index_elements)
+        else:
+            stmt = ins.on_conflict_do_nothing(constraint=constraint)
         result = await db.execute(stmt)
         await db.commit()
         return result.rowcount
@@ -128,7 +133,7 @@ async def backfill(
                                         unit="days", source="yfinance/daily")
         t0   = time.monotonic()
         rows = fetch_daily(symbol, start_daily, end)
-        n    = await upsert_rows(rows, OHLCV, "uq_ohlcv_symbol_ts")
+        n    = await upsert_rows(rows, OHLCV, index_elements=["symbol", "ts"])
         if emitter:
             await emitter.ticker_progress(symbol, current=total_daily_days,
                                            total=total_daily_days, unit="days",
@@ -168,7 +173,7 @@ async def backfill(
                 symbol, start_hourly, end,
                 on_chunk=_on_chunk if emitter else None
             )
-            nh = await upsert_rows(hourly_rows, OHLCVHourly, "uq_ohlcv_hourly_symbol_ts")
+            nh = await upsert_rows(hourly_rows, OHLCVHourly, index_elements=["symbol", "ts"])
             if emitter:
                 await emitter.ticker_done(symbol, rows_inserted=nh,
                                            rows_total=len(hourly_rows), source="hourly")
