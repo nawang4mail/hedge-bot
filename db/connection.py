@@ -7,6 +7,7 @@ Call init_db() once at startup to create tables and enable TimescaleDB extension
 from __future__ import annotations
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.pool import NullPool
 from config import settings
 
 # Convert postgresql:// → postgresql+asyncpg://
@@ -14,11 +15,15 @@ _async_url = settings.database_url.replace(
     "postgresql://", "postgresql+asyncpg://"
 )
 
+# NullPool: no connection pooling. Each AsyncSessionLocal() opens a fresh
+# asyncpg connection in whatever event loop is current. Required because the
+# pipeline runs via run_in_executor (thread-local event loop) while FastAPI
+# routes run in the main loop — pooled connections bind to one loop and fail
+# if reused from the other.
 engine = create_async_engine(
     _async_url,
-    pool_size=5,
-    max_overflow=10,
-    echo=False,          # set True to log all SQL
+    poolclass=NullPool,
+    echo=False,
 )
 
 AsyncSessionLocal = async_sessionmaker(
