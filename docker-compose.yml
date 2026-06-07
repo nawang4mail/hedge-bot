@@ -43,6 +43,7 @@ services:
     environment:
       - DATABASE_URL=postgresql://hedge:${POSTGRES_PASSWORD}@timescaledb:5432/hedgebot
       - OLLAMA_BASE_URL=http://ollama:11434
+      - GOOGLE_APPLICATION_CREDENTIALS=/root/.config/gcloud/application_default_credentials.json
     ports:
       - "8000:8000"
     depends_on:
@@ -50,6 +51,7 @@ services:
       - timescaledb
     volumes:
       - .:/app
+      - ~/.config/gcloud:/root/.config/gcloud:ro
     command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
     restart: unless-stopped
 
