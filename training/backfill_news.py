@@ -38,9 +38,9 @@ def fetch_gdelt_sentiment(symbol: str, start: str, end: str,
     WITH articles AS (
       SELECT
         PARSE_DATE('%Y%m%d', SUBSTR(CAST(DATE AS STRING), 1, 8)) as article_date,
-        CAST(V2Tone_1 AS FLOAT64) as tone,
-        CASE WHEN CAST(V2Tone_1 AS FLOAT64) > 0 THEN 1 ELSE 0 END as is_positive,
-        CASE WHEN CAST(V2Tone_1 AS FLOAT64) < 0 THEN 1 ELSE 0 END as is_negative
+        SAFE_CAST(SPLIT(V2Tone, ',')[SAFE_OFFSET(0)] AS FLOAT64) as tone,
+        CASE WHEN SAFE_CAST(SPLIT(V2Tone, ',')[SAFE_OFFSET(0)] AS FLOAT64) > 0 THEN 1 ELSE 0 END as is_positive,
+        CASE WHEN SAFE_CAST(SPLIT(V2Tone, ',')[SAFE_OFFSET(0)] AS FLOAT64) < 0 THEN 1 ELSE 0 END as is_negative
       FROM `gdelt-bq.gdeltv2.gkg`
       WHERE DATE >= @start_date AND DATE <= @end_date
         AND (
