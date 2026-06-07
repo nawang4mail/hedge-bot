@@ -75,8 +75,12 @@ def _compute_indicators(snapshot: MarketSnapshot) -> dict[str, Any]:
     # Bollinger Bands
     bb = ta.bbands(close, length=20)
     if bb is not None and not bb.empty:
-        result["bollinger_upper"] = round(float(bb["BBU_20_2.0"].iloc[-1]), 4)
-        result["bollinger_lower"] = round(float(bb["BBL_20_2.0"].iloc[-1]), 4)
+        bbu_col = next((c for c in bb.columns if c.startswith("BBU_")), None)
+        bbl_col = next((c for c in bb.columns if c.startswith("BBL_")), None)
+        if bbu_col:
+            result["bollinger_upper"] = round(float(bb[bbu_col].iloc[-1]), 4)
+        if bbl_col:
+            result["bollinger_lower"] = round(float(bb[bbl_col].iloc[-1]), 4)
 
     # Volume spike: today's volume > 2× 20-day average
     avg_vol = float(vol.rolling(20).mean().iloc[-1]) if len(vol) >= 20 else float(vol.mean())
