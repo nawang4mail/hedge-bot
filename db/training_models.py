@@ -14,7 +14,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from sqlalchemy import (
     Column, String, Float, Boolean, Integer,
-    DateTime, Text, JSON, UniqueConstraint, ForeignKey
+    DateTime, Text, JSON, UniqueConstraint, Index, ForeignKey
 )
 from db.connection import Base
 
