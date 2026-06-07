@@ -496,6 +496,29 @@ async def list_models(db: AsyncSession = Depends(get_db)):
     return [r.to_dict() for r in result.scalars().all()]
 
 
+@app.delete("/training/models/{model_id}", status_code=200)
+async def delete_model(model_id: int, db: AsyncSession = Depends(get_db)):
+    from db.training_models import ModelRegistry
+    from sqlalchemy import select, delete as sa_delete
+    import os
+
+    result = await db.execute(select(ModelRegistry).where(ModelRegistry.id == model_id))
+    model = result.scalar_one_or_none()
+    if model is None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Model not found")
+
+    # Remove .pkl, scaler, and meta JSON files
+    meta_path = model.file_path.replace(".pkl", "_meta.json") if model.file_path else None
+    for path in [model.file_path, model.scaler_path, meta_path]:
+        if path and os.path.exists(path):
+            os.remove(path)
+
+    await db.execute(sa_delete(ModelRegistry).where(ModelRegistry.id == model_id))
+    await db.commit()
+    return {"deleted": model_id}
+
+
 @app.get("/training/backtests")
 async def list_backtests(
     symbol: str | None = None,
