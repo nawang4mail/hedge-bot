@@ -203,7 +203,7 @@ async def train_model(
         "train_rows": len(train_idx), "test_rows": len(test_idx),
     }
     meta_path = MODELS_DIR / f"{symbol}_{timeframe}_v{version}_meta.json"
-    meta_path.write_text(json.dumps(meta, indent=2))
+    meta_path.write_text(json.dumps(meta, indent=2, default=lambda x: float(x) if hasattr(x, "item") else str(x)))
 
     # Register in DB
     await _register_model(meta, str(model_path), str(scaler_path), df.index[0], df.index[-1])

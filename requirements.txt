@@ -41,6 +41,7 @@ praw>=7.7.0                    # Reddit API
 google-cloud-bigquery>=3.20.0  # GDELT via BigQuery
 google-auth>=2.29.0
 httpx>=0.27.0
+lxml>=5.2.0                    # required by yfinance earnings_dates scraper
 
 # ── Utilities ─────────────────────────────────────────────────────────────────
 pydantic>=2.7.0
