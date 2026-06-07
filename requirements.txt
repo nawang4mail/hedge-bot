@@ -21,7 +21,7 @@ newsapi-python>=0.2.7
 # ── Quant / analysis ──────────────────────────────────────────────────────────
 pandas>=2.2.0
 numpy>=1.26.0
-pandas-ta>=0.3.14b0  # TA-Lib pure-Python alternative (no C build needed)
+pandas-ta>=0.4.67b0  # TA-Lib pure-Python alternative; requires Python >=3.12
 scipy>=1.13.0
 
 # ── Database (TimescaleDB / PostgreSQL) ───────────────────────────────────────
