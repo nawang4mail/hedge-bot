@@ -101,6 +101,7 @@ def observation_node(state: dict[str, Any]) -> dict[str, Any]:
     """
     LangGraph node.  Receives state dict, returns partial update dict.
     """
+    logs = list(state.get("agent_logs") or [])
     s = AgentState(**state)
     symbol = s.symbol
     logs = list(s.agent_logs)
@@ -157,10 +158,11 @@ def observation_node(state: dict[str, Any]) -> dict[str, Any]:
         })
 
         return {
+            **state,
             "market_snapshot": snapshot,
             "agent_logs": logs,
         }
 
     except Exception as exc:
         logs.append({"agent": "observation", "status": "error", "msg": str(exc)})
-        return {"error": str(exc), "agent_logs": logs}
+        return {**state, "error": str(exc), "agent_logs": logs}

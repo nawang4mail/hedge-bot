@@ -105,6 +105,7 @@ def _detect_anomalies(indicators: dict, snapshot: MarketSnapshot) -> list[str]:
 # ── Agent node ────────────────────────────────────────────────────────────────
 
 def research_node(state: dict[str, Any]) -> dict[str, Any]:
+    logs = list(state.get("agent_logs") or [])
     s = AgentState(**state)
     logs = list(s.agent_logs)
 
@@ -204,8 +205,8 @@ def research_node(state: dict[str, Any]) -> dict[str, Any]:
             "output": json.loads(report.model_dump_json()),
         })
 
-        return {"research_report": report, "agent_logs": logs}
+        return {**state, "research_report": report, "agent_logs": logs}
 
     except Exception as exc:
         logs.append({"agent": "research", "status": "error", "msg": str(exc)})
-        return {"error": str(exc), "agent_logs": logs}
+        return {**state, "error": str(exc), "agent_logs": logs}
