@@ -30,6 +30,28 @@ def _get_bq_client():
     return bigquery.Client(project=project)
 
 
+_STOP_WORDS = {"inc", "corp", "corporation", "ltd", "llc", "co", "company",
+               "group", "holdings", "technologies", "technology", "the"}
+
+def _company_search_term(symbol: str) -> str:
+    """Return the best single search word for GDELT: first meaningful word of
+    the company name, falling back to the ticker itself."""
+    try:
+        import yfinance as yf
+        info = yf.Ticker(symbol).info
+        name = info.get("longName") or info.get("shortName") or ""
+        if name:
+            import re
+            words = re.split(r"[\s,\.&/]+", name.lower())
+            for word in words:
+                clean = re.sub(r"[^a-z]", "", word)
+                if len(clean) > 2 and clean not in _STOP_WORDS:
+                    return clean
+    except Exception:
+        pass
+    return symbol.lower()
+
+
 def fetch_gdelt_sentiment(symbol: str, start: str, end: str,
                            on_progress: callable | None = None) -> list[dict]:
     from google.cloud import bigquery
@@ -66,13 +88,15 @@ def fetch_gdelt_sentiment(symbol: str, start: str, end: str,
     ORDER BY article_date
     """
     # GDELT DATE column is INT64 in YYYYMMDDHHMMSS format (e.g. 20240101120000)
-    start_i = int(start.replace("-", "") + "000000")
-    end_i   = int(end.replace("-", "")   + "235959")
+    start_i      = int(start.replace("-", "") + "000000")
+    end_i        = int(end.replace("-", "")   + "235959")
+    search_term  = _company_search_term(symbol)
+    print(f"    GDELT search term for {symbol}: %{search_term}%")
     job_config = bigquery.QueryJobConfig(
         query_parameters=[
             bigquery.ScalarQueryParameter("start_date",     "INT64",  start_i),
             bigquery.ScalarQueryParameter("end_date",       "INT64",  end_i),
-            bigquery.ScalarQueryParameter("symbol_pattern", "STRING", f"%{symbol.lower()}%"),
+            bigquery.ScalarQueryParameter("symbol_pattern", "STRING", f"%{search_term}%"),
         ]
     )
     raw_rows = list(client.query(query, job_config=job_config).result())
